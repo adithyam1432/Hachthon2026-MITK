@@ -111,6 +111,77 @@ class TestPolicyEngine(unittest.TestCase):
         # Non-whitelisted field tokenized
         self.assertTrue(received["arguments"]["secret_backup"].startswith("⟦EMAIL_"))
 
+    def test_dynamic_pii_rules_dual_mode_profile_change(self):
+        """Validates simultaneous Tokenization (Name) and Redaction (Passport) from rules config."""
+        rules = {
+            "PII_RULES": {
+                "NAME": "TOKENIZE",
+                "PASSPORT_NUMBER": "REDACT"
+            }
+        }
+        policy = PolicyEngine.from_rules_dict(rules, simple_redaction=True)
+        fw = PIIFirewall(policy_engine=policy)
+
+        request = {
+            "tool": "profile_updater",
+            "arguments": {
+                "query": "Update account profile. Name: David Miller, Passport: A12345678, Status: Active."
+            }
+        }
+        res, vault = fw.intercept_request(request)
+        sent = res.sanitized_payload["arguments"]["query"]
+
+        # 1. Name is tokenized and stored in vault
+        self.assertIn("⟦PERSON_NAME_", sent)
+        self.assertNotIn("David Miller", sent)
+        self.assertEqual(len(vault._token_to_value), 1)
+
+        # 2. Passport is redacted and NOT stored in vault
+        self.assertIn("[REDACTED]", sent)
+        self.assertNotIn("A12345678", sent)
+
+        # 3. Simulate tool response and verify restoration
+        mock_response = {
+            "status": "success",
+            "message": f"Profile updated for {list(vault._token_to_value.keys())[0]} with [REDACTED]."
+        }
+        restored, _ = fw.intercept_response(mock_response, request_id=res.metrics.request_id)
+        self.assertIn("David Miller", restored["message"])
+        self.assertIn("[REDACTED]", restored["message"])
+        self.assertNotIn("A12345678", restored["message"])
+
+    def test_dynamic_pii_rules_dual_mode_visual_comparison(self):
+        """Validates side-by-side demo: Name tokenized & re-hydrated, SSN redacted permanently."""
+        rules = {
+            "PII_RULES": {
+                "NAME": "TOKENIZE",
+                "SSN": "REDACT"
+            }
+        }
+        policy = PolicyEngine.from_rules_dict(rules, simple_redaction=True)
+        fw = PIIFirewall(policy_engine=policy)
+
+        raw_query = "Send a welcome note to David Miller and delete expired file containing SSN 999-12-3456."
+        request = {"tool": "crm_tool", "arguments": {"query": raw_query}}
+        res, vault = fw.intercept_request(request)
+        sent = res.sanitized_payload["arguments"]["query"]
+
+        self.assertIn("⟦PERSON_NAME_", sent)
+        self.assertIn("[REDACTED]", sent)
+        self.assertNotIn("David Miller", sent)
+        self.assertNotIn("999-12-3456", sent)
+
+        token = list(vault._token_to_value.keys())[0]
+        tool_reply = {
+            "msg": f"Task complete for {token}. File referenced with [REDACTED] has been scrubbed."
+        }
+        restored, _ = fw.intercept_response(tool_reply, request_id=res.metrics.request_id)
+        self.assertEqual(
+            restored["msg"],
+            "Task complete for David Miller. File referenced with [REDACTED] has been scrubbed."
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+

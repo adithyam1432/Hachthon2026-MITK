@@ -587,7 +587,7 @@ class ContextAwareNLPEngine:
 
         # Person Name in context (2 to 4 capitalized tokens following customer/profile/name contextual cues)
         name_cand_pattern = re.compile(
-            r"(?i:(?:(?:customer|user|client|employee|patient|individual|applicant|profile|member|account(?:\s+holder)?)\s*(?:onboarding\s+)?(?::|=|->|\s+(?:name\s*(?:is|was|:|=|->)?|profile\s+for|record\s+for|for\s+))|(?:full\s+)?name\s*(?:is|was|:|=|->)?|named\s+|profile\s+for\s+|record\s+for\s+|onboarding\s+(?:profile\s+)?for\s+|(?:Mr|Mrs|Ms|Miss|Dr|Prof)\.?\s*)\s*)"
+            r"(?i:(?:(?:customer|user|client|employee|patient|individual|applicant|profile|member|account(?:\s+holder)?)\s*(?:onboarding\s+)?(?::|=|->|\s+(?:name\s*(?:is|was|:|=|->)?|profile\s+for|record\s+for|for\s+))|(?:full\s+)?name\s*(?:is|was|:|=|->)?|named\s+|profile\s+for\s+|record\s+for\s+|onboarding\s+(?:profile\s+)?for\s+|(?:welcome\s+)?(?:note|letter|message|email|invitation)\s+to\s+|(?:Mr|Mrs|Ms|Miss|Dr|Prof)\.?\s*)\s*)"
             r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})"
         )
         for m in name_cand_pattern.finditer(text):
@@ -608,6 +608,53 @@ class ContextAwareNLPEngine:
                             has_exposed_value=True
                         )
                     )
+
+        # Passport Number in context (e.g. Passport: A12345678, passport no: A12345678)
+        passport_cand_pattern = re.compile(
+            r"(?i:(?:passport(?:\s*(?:no\.?|num(?:ber)?|id|doc))?)\s*(?:is|was|:|=|->|#|\s)\s*)"
+            r"([A-Za-z][0-9]{7,9}|[A-Za-z0-9]{8,10})",
+            re.IGNORECASE
+        )
+        for m in passport_cand_pattern.finditer(text):
+            cand_val = m.group(1).strip()
+            start_pos, end_pos = m.start(1), m.end(1)
+            if not any(e.start == start_pos and e.end == end_pos for e in entities):
+                entities.append(
+                    PIIEntity(
+                        pii_type=PIIType.PASSPORT,
+                        start=start_pos,
+                        end=end_pos,
+                        value=cand_val,
+                        confidence=0.98,
+                        category=SensitivityCategory.PERSONAL_INFO,
+                        context_evidence="Passport identifier context",
+                        has_exposed_value=True
+                    )
+                )
+
+        # Contextual SSN in context (e.g. "containing SSN 999-12-3456", "SSN: 999-12-3456")
+        ssn_ctx_pattern = re.compile(
+            r"(?i:(?:ssn|social\s*security(?:\s*number)?)\s*(?:is|was|:|=|->|#|\s)\s*)"
+            r"(\d{3}-\d{2}-\d{4}|\d{3}\s+\d{2}\s+\d{4})",
+            re.IGNORECASE
+        )
+        for m in ssn_ctx_pattern.finditer(text):
+            cand_val = m.group(1).strip()
+            start_pos, end_pos = m.start(1), m.end(1)
+            if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
+                entities.append(
+                    PIIEntity(
+                        pii_type=PIIType.SSN,
+                        start=start_pos,
+                        end=end_pos,
+                        value=cand_val,
+                        confidence=0.99,
+                        category=SensitivityCategory.PERSONAL_INFO,
+                        context_evidence="Contextual SSN identifier",
+                        has_exposed_value=True
+                    )
+                )
+
 
         # -------------------------------------------------------------
         # H. Indian Identifiers Context Analysis (Aadhaar & PAN)

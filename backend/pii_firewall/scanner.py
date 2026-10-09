@@ -108,7 +108,9 @@ class JSONPIIScanner:
                     # Allow raw value to pass through
                     continue
                 elif action == PolicyAction.REDACT:
-                    if getattr(entity, "category", None) == SensitivityCategory.CREDENTIAL:
+                    if getattr(policy, "simple_redaction", False):
+                        replacement = "[REDACTED]"
+                    elif getattr(entity, "category", None) == SensitivityCategory.CREDENTIAL:
                         replacement = "[REDACTED_CREDENTIAL]"
                     else:
                         replacement = f"[REDACTED_{type_name}]"

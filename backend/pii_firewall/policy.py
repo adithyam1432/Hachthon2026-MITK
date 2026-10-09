@@ -7,10 +7,11 @@ Security Principles Enforced:
   C. Confidential Business Information: Destination-Aware Controls & Allowlists.
 """
 
+import json
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Union
 from pii_firewall.models import PIIType, SensitivityCategory, TYPE_TO_CATEGORY
 
 
@@ -156,9 +157,12 @@ class PolicyEngine:
         default_action: PolicyAction = PolicyAction.TOKENIZE,
         destination_allowlists: Optional[Dict[SensitivityCategory, Set[str]]] = None,
         block_credentials_by_default: bool = True,
+        pii_rules: Optional[Dict[str, Union[PolicyAction, str]]] = None,
+        simple_redaction: bool = False,
     ):
         self.default_action = default_action
         self.block_credentials_by_default = block_credentials_by_default
+        self.simple_redaction = simple_redaction
         self._tool_policies: Dict[str, ToolPolicyRule] = {}
         
         # Principle C & A: Authorized destinations per category
@@ -178,8 +182,123 @@ class PolicyEngine:
             SensitivityCategory.PERSONAL_INFO: {"*"},
         }
 
+        if pii_rules:
+            self.load_pii_rules(pii_rules)
+
+    @staticmethod
+    def normalize_pii_type(name: str) -> Union[PIIType, str]:
+        """Normalizes rule keys to standard PIIType enum."""
+        alias_map = {
+            "NAME": PIIType.PERSON_NAME,
+            "PERSON_NAME": PIIType.PERSON_NAME,
+            "FULL_NAME": PIIType.PERSON_NAME,
+            "CUSTOMER_NAME": PIIType.PERSON_NAME,
+            "PHONE": PIIType.PHONE,
+            "PHONE_NUMBER": PIIType.PHONE,
+            "MOBILE": PIIType.PHONE,
+            "PASSPORT": PIIType.PASSPORT,
+            "PASSPORT_NUMBER": PIIType.PASSPORT,
+            "SSN": PIIType.SSN,
+            "SOCIAL_SECURITY_NUMBER": PIIType.SSN,
+            "EMAIL": PIIType.EMAIL,
+            "CREDIT_CARD": PIIType.CREDIT_CARD,
+            "CARD_NUMBER": PIIType.CREDIT_CARD,
+            "AADHAAR": PIIType.AADHAAR,
+            "PAN": PIIType.PAN_CARD,
+            "PAN_CARD": PIIType.PAN_CARD,
+            "DOB": PIIType.DATE_OF_BIRTH,
+            "DATE_OF_BIRTH": PIIType.DATE_OF_BIRTH,
+            "DL": PIIType.DRIVERS_LICENSE,
+            "DRIVERS_LICENSE": PIIType.DRIVERS_LICENSE,
+            "IP": PIIType.IP_ADDRESS,
+            "IP_ADDRESS": PIIType.IP_ADDRESS,
+            "API_KEY": PIIType.API_KEY,
+        }
+        clean = name.strip().upper()
+        return alias_map.get(clean, clean)
+
+    @staticmethod
+    def normalize_policy_action(action: Union[PolicyAction, str]) -> PolicyAction:
+        """Normalizes action strings to PolicyAction enum."""
+        if isinstance(action, PolicyAction):
+            return action
+        clean = str(action).strip().upper()
+        if "TOKEN" in clean:
+            return PolicyAction.TOKENIZE
+        if "REDACT" in clean:
+            return PolicyAction.REDACT
+        if "MASK" in clean:
+            return PolicyAction.MASK
+        if "BLOCK" in clean:
+            return PolicyAction.BLOCK_TOOL
+        if "PASS" in clean or "ALLOW" in clean:
+            return PolicyAction.PASS_THROUGH
+        return PolicyAction.TOKENIZE
+
+    def set_pii_rule(
+        self,
+        pii_type: Union[PIIType, str],
+        action: Union[PolicyAction, str],
+        tool_name: str = "*",
+    ) -> None:
+        """Dynamically registers or updates an action for a specific PII type."""
+        norm_type = self.normalize_pii_type(str(pii_type)) if isinstance(pii_type, str) else pii_type
+        norm_action = self.normalize_policy_action(action)
+        rule = self._tool_policies.get(tool_name)
+        if not rule:
+            rule = ToolPolicyRule(tool_name=tool_name, pii_actions={})
+            self._tool_policies[tool_name] = rule
+        rule.pii_actions[norm_type] = norm_action
+
+    def load_pii_rules(
+        self,
+        rules_dict_or_json: Union[Dict[str, Any], str],
+        tool_name: str = "*",
+    ) -> None:
+        """
+        Dynamically loads classification rules, e.g.:
+        {
+          "PII_RULES": {
+            "NAME": "TOKENIZE",
+            "PHONE_NUMBER": "TOKENIZE",
+            "PASSPORT_NUMBER": "REDACT",
+            "SSN": "REDACT"
+          }
+        }
+        """
+        data = rules_dict_or_json
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except Exception:
+                return
+
+        rules = data.get("PII_RULES", data) if isinstance(data, dict) else {}
+        if not isinstance(rules, dict):
+            return
+
+        for p_name, act in rules.items():
+            self.set_pii_rule(p_name, act, tool_name=tool_name)
+
+    @classmethod
+    def from_rules_dict(
+        cls,
+        rules: Dict[str, Any],
+        tool_name: str = "*",
+        default_action: PolicyAction = PolicyAction.TOKENIZE,
+        simple_redaction: bool = False,
+    ) -> "PolicyEngine":
+        """Factory creating a PolicyEngine configured from a rules dictionary."""
+        engine = cls(
+            default_action=default_action,
+            simple_redaction=simple_redaction,
+            pii_rules=rules,
+        )
+        return engine
+
     def add_rule(self, rule: ToolPolicyRule) -> None:
         self._tool_policies[rule.tool_name] = rule
+
 
     def authorize_destination_for_category(
         self,

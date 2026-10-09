@@ -2,6 +2,7 @@
 PII Recognizers registry and exports.
 """
 
+import os
 from typing import Dict, List, Optional, Set
 from pii_firewall.models import PIIType
 from pii_firewall.recognizers.base import BasePIIRecognizer
@@ -27,7 +28,7 @@ def get_default_recognizers(
     check_verhoeff: bool = True,
     enable_semantic_nlp: bool = True,
     gemini_api_key: Optional[str] = None,
-    gemini_model: str = "gemini-1.5-flash",
+    gemini_model: str = "gemini-3.5-flash-lite",
 ) -> List[BasePIIRecognizer]:
     """Factory creating recognizers based on enabled configuration."""
     recognizers: List[BasePIIRecognizer] = []
@@ -49,8 +50,13 @@ def get_default_recognizers(
         recognizers.append(AadhaarRecognizer(check_verhoeff=check_verhoeff))
     if enable_semantic_nlp:
         recognizers.append(SemanticNLPRecognizer())
-    if gemini_api_key and gemini_api_key.strip():
-        recognizers.append(GeminiPIIRecognizer(api_key=gemini_api_key, model=gemini_model))
+    active_gemini_key = gemini_api_key or (
+        os.environ.get("GEMINI_API_KEY", "").strip()
+        if not os.environ.get("GEMINI_UNIT_TEST_MODE")
+        else ""
+    )
+    if active_gemini_key:
+        recognizers.append(GeminiPIIRecognizer(api_key=active_gemini_key, model=gemini_model))
     return recognizers
 
 

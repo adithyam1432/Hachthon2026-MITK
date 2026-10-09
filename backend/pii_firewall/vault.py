@@ -24,16 +24,30 @@ class RequestTokenVault:
         request_id: Optional[str] = None,
         prefix: str = "⟦",
         suffix: str = "⟧",
+        client_mac: Optional[str] = None,
     ):
         self.request_id = request_id or str(uuid.uuid4())
         self.prefix = prefix
         self.suffix = suffix
+        self.client_mac = client_mac
         # Random salt per request to ensure tokens are opaque and unpredictable across requests
         self._salt = os.urandom(16)
+        if client_mac:
+            # Cryptographically bind hardware Layer 2 MAC identity into the salt
+            self._salt = hashlib.sha256(self._salt + client_mac.encode("utf-8")).digest()[:16]
         # Bidirectional storage
         self._value_to_token: Dict[str, str] = {}
         self._token_to_value: Dict[str, str] = {}
         self._token_types: Dict[str, PIIType] = {}
+
+    def verify_client_identity(self, mac_address: Optional[str]) -> bool:
+        """
+        Validates that the restoring client matches the Layer 2 MAC address that initiated the vault.
+        Returns True if matching or unconstrained; False if MAC mismatch (spoofing attempt).
+        """
+        if not self.client_mac:
+            return True
+        return self.client_mac.lower() == (mac_address or "").lower()
 
     def get_or_create_token(self, value: str, pii_type: PIIType) -> str:
         """

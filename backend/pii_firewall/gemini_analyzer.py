@@ -9,6 +9,7 @@ Operates with graceful failover to local deterministic & NLP engines.
 import json
 import logging
 import os
+from pathlib import Path
 import re
 from typing import Any, Dict, List, Optional
 import requests
@@ -22,6 +23,34 @@ from pii_firewall.models import (
 from pii_firewall.recognizers.base import BasePIIRecognizer
 
 logger = logging.getLogger("pii_firewall.gemini")
+
+
+def load_env_file() -> None:
+    """Loads environment variables from .env files in root or backend."""
+    candidates = [
+        Path.cwd() / ".env",
+        Path.cwd() / "backend" / ".env",
+        Path(__file__).resolve().parent.parent / ".env",
+        Path(__file__).resolve().parent.parent.parent / ".env",
+    ]
+    for p in candidates:
+        if p.exists() and p.is_file():
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            k = k.strip()
+                            v = v.strip().strip("'\"")
+                            if k and k not in os.environ and v:
+                                os.environ[k] = v
+            except Exception:
+                pass
+
+
+# Auto-load on import
+load_env_file()
 
 # Mapping from common Gemini type strings to PIIType enum
 GEMINI_TYPE_MAP: Dict[str, PIIType] = {
@@ -117,11 +146,11 @@ class GeminiPIIAnalyzer:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "gemini-1.5-flash",
+        model: Optional[str] = None,
         timeout: float = 6.0,
     ):
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
-        self.model = model
+        self.api_key = api_key if api_key is not None else os.environ.get("GEMINI_API_KEY", "")
+        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
         self.timeout = timeout
         self.last_error: Optional[str] = None
 
@@ -246,7 +275,7 @@ class GeminiPIIRecognizer(BasePIIRecognizer):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "gemini-1.5-flash",
+        model: Optional[str] = None,
         timeout: float = 6.0,
     ):
         super().__init__(pii_type=PIIType.EMAIL)

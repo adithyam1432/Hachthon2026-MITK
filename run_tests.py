@@ -13,6 +13,9 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def run_all_tests():
+    import os
+    os.environ["GEMINI_UNIT_TEST_MODE"] = "1"
+
     # Ensure backend directory is in sys.path
     backend_dir = Path(__file__).resolve().parent / "backend"
     if str(backend_dir) not in sys.path:

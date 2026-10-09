@@ -103,3 +103,15 @@ The **PII Firewall for AI Agents** is an enterprise-grade privacy middleware tha
 | **FR-15**: Simulated External Tool | `SimulatedExternalTool` records exact received payloads | `test_firewall_e2e.py` | Verified |
 | **FR-16 - FR-19**: Response Restoration | `ResponseRestorer.restore()` | `test_selective_field_restoration` | Verified |
 | **FR-20**: Latency Measurement | Sub-millisecond tracking (`time.perf_counter()`) | `test_performance.py` | Verified |
+
+---
+
+## 5. Data Link Layer (OSI Layer 2) Defense-in-Depth
+
+In enterprise deployments (Commvault clusters, Kubernetes CNI, private VPCs), PII Firewall integrates with Data Link Layer security controls:
+- **IEEE 802.1AE MACsec**: Line-rate Layer 2 Ethernet frame encryption with GCM-AES.
+- **Dynamic ARP Inspection (DAI) & DHCP Snooping**: Defeats ARP poisoning and MITM rerouting attacks.
+- **802.1Q VLAN Microsegmentation**: Isolates Agent Ingress (`VLAN 101`) from Tool Egress (`VLAN 202`).
+- **Container Bridge Hardening**: Enforces `promisc=off` and eBPF socket redirection to eliminate virtual bridge packet sniffing.
+- *Detailed specification available at:* [`docs/DATA_LINK_LAYER_SECURITY.md`](DATA_LINK_LAYER_SECURITY.md)
+

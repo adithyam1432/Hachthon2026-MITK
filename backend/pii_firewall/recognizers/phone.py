@@ -28,6 +28,8 @@ class PhoneRecognizer(BasePIIRecognizer):
         re.compile(r'(?:^|(?<=[^\w]))(?:\+?1[-.\s]?)?(?:\(\d{3}\)|\d{3})[-.\s]\d{3}[-.\s]\d{4}\b'),
         # Indian standard 10 digit starting with 6, 7, 8, or 9 with optional +91 or 0 prefix
         re.compile(r'(?:^|(?<=[^\w]))(?:\+91[-.\s]?|0)?[6-9]\d{4}[-.\s]?\d{5}\b'),
+        # Adversarial digit spacing: e.g. 9 8 7 6 5 4 3 2 1 0 or +91 9 8 7 6 5 4 3 2 1 0
+        re.compile(r'(?:^|(?<=[^\w]))(?:\+91\s*|0\s*)?[6-9]\s*\d(?:\s*\d){8}\b'),
     ]
 
     def __init__(self):

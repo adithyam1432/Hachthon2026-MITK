@@ -14,6 +14,9 @@ class EmailRecognizer(BasePIIRecognizer):
     EMAIL_PATTERN = re.compile(
         r'(?i)\b([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})\b'
     )
+    OBFUSCATED_EMAIL_PATTERN = re.compile(
+        r'(?i)\b([a-z0-9._%+-]+(?:\s*\[at\]\s*|\s*\(at\)\s*|\s+at\s+)[a-z0-9.-]+(?:\s*\[dot\]\s*|\s*\(dot\)\s*|\s+dot\s+|\.)[a-z]{2,})\b'
+    )
 
     def __init__(self):
         super().__init__(PIIType.EMAIL)
@@ -23,15 +26,18 @@ class EmailRecognizer(BasePIIRecognizer):
             return []
 
         entities: List[PIIEntity] = []
+        covered_spans = set()
+
+        # 1. Standard RFC email matching
         for match in self.EMAIL_PATTERN.finditer(text):
             value = match.group(1)
-            # Remove any trailing punctuation erroneously caught if edge-case
             while value and value[-1] in ".,;:!?)":
                 value = value[:-1]
 
             if "@" in value and "." in value.split("@")[-1]:
                 start = match.start(1)
                 end = start + len(value)
+                covered_spans.add((start, end))
                 entities.append(
                     PIIEntity(
                         pii_type=self.pii_type,
@@ -41,4 +47,26 @@ class EmailRecognizer(BasePIIRecognizer):
                         confidence=0.98,
                     )
                 )
+
+        # 2. Obfuscated anti-scraping / adversarial email matching ([at], (at), [dot])
+        for match in self.OBFUSCATED_EMAIL_PATTERN.finditer(text):
+            value = match.group(1)
+            while value and value[-1] in ".,;:!?)":
+                value = value[:-1]
+
+            start = match.start(1)
+            end = start + len(value)
+            # Avoid duplicate if already covered by standard pattern
+            if not any(not (end <= cs or start >= ce) for cs, ce in covered_spans):
+                covered_spans.add((start, end))
+                entities.append(
+                    PIIEntity(
+                        pii_type=self.pii_type,
+                        start=start,
+                        end=end,
+                        value=value,
+                        confidence=0.95,
+                    )
+                )
+
         return entities

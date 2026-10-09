@@ -50,7 +50,7 @@ class PIIFirewall:
             check_verhoeff=self.config.enable_verhoeff_validation,
             enable_semantic_nlp=self.config.enable_semantic_nlp,
             gemini_api_key=getattr(self.config, "gemini_api_key", None),
-            gemini_model=getattr(self.config, "gemini_model", "gemini-1.5-flash"),
+            gemini_model=getattr(self.config, "gemini_model", "gemini-3.5-flash-lite"),
         )
         self.scanner = JSONPIIScanner(self.recognizers)
         self.verifier = LeakageVerifier()

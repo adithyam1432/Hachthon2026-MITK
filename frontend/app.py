@@ -240,7 +240,7 @@ user_prompt = st.text_area(
 )
 
 st.markdown("#### Controls:")
-ctrl_col1, ctrl_col2 = st.columns([2.5, 1])
+ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([1.6, 2.2, 0.8])
 with ctrl_col1:
     chosen_sim_action_raw = st.selectbox(
         "Privacy Protection Action:",
@@ -250,7 +250,7 @@ with ctrl_col1:
             "REDACT",
         ],
         index=0,
-        help="MASK = Partial masking | TOKENIZE = Reversible encrypted tokens | REDACT = Permanent removal"
+        help="MASK = Partial masking (s***h@gmail.com)\nTOKENIZE = Reversible encrypted tokens (⟦EMAIL_...⟧)\nREDACT = Permanent removal ([REDACTED_EMAIL])"
     )
     if "MASK" in chosen_sim_action_raw:
         chosen_sim_action = "MASK"
@@ -260,38 +260,39 @@ with ctrl_col1:
         chosen_sim_action = "REDACT"
 
 with ctrl_col2:
-    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-    send_sim_clicked = st.button("🚀 Send", type="primary", use_container_width=True)
-
-with st.expander("🤖 AI Integration (Google Gemini Free API - Optional)", expanded=False):
     gemini_key_input = st.text_input(
-        "Gemini API Key (Google AI Studio Free Tier):",
+        "🔑 Gemini API Key (Optional - Free Tier):",
         value=os.environ.get("GEMINI_API_KEY", ""),
         type="password",
         placeholder="AIzaSy... (leave blank to use local NLP engine)",
-        help="Get a 100% free API key from https://aistudio.google.com/app/apikey"
+        help="Paste your free API key from https://aistudio.google.com/app/apikey. If blank, the high-speed local Context-Aware NLP Engine is used automatically."
     )
-    col_g1, col_g2 = st.columns([1, 1])
-    with col_g1:
-        gemini_model_choice = st.selectbox(
-            "Gemini Model:",
-            options=["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
-            index=0,
-            help="gemini-1.5-flash has the highest free tier rate limits (15 RPM, 1M TPM)"
-        )
-    with col_g2:
-        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-        if gemini_key_input.strip():
-            st.success("🟢 Gemini AI Active (Cloud LLM Mode)")
-        else:
-            st.info("🔵 Local Context-Aware NLP Active")
+
+with ctrl_col3:
+    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+    send_sim_clicked = st.button("🚀 Send", type="primary", use_container_width=True)
+
+# Live Mode Indicator
+if gemini_key_input.strip():
+    st.markdown(
+        "<div style='font-size: 0.83rem; color: #10B981; margin-top: -6px; margin-bottom: 10px;'>"
+        "🟢 <b>AI Mode Active:</b> Google Gemini API (<code>gemini-1.5-flash</code>) will semantically analyze prompt."
+        "</div>",
+        unsafe_allow_html=True
+    )
+else:
+    st.markdown(
+        "<div style='font-size: 0.83rem; color: #94A3B8; margin-top: -6px; margin-bottom: 10px;'>"
+        "🔵 <b>Local Mode Active:</b> Context-Aware NLP, NER & Checksum Validators running locally (100% private & offline)."
+        "</div>",
+        unsafe_allow_html=True
+    )
 
 if send_sim_clicked:
     st.session_state["sim_has_executed"] = True
     st.session_state["executed_prompt"] = user_prompt
     st.session_state["executed_action"] = chosen_sim_action
     st.session_state["executed_gemini_key"] = gemini_key_input.strip()
-    st.session_state["executed_gemini_model"] = gemini_model_choice
 
 
 # =====================================================================
@@ -499,10 +500,11 @@ if st.session_state.get("sim_has_executed", False):
             </div>
             """, unsafe_allow_html=True)
         else:
+            action_name = "Masking" if active_action == "MASK" else ("Tokenization" if active_action == "TOKENIZE" else "Redaction")
             st.markdown(f"""
             <div class="step-card" style="border-left: 4px solid #8B5CF6;">
               <div class="step-title">3️⃣ STEP 3: Privacy Transformation Applied ({active_action})</div>
-              <div><b>Masking Applied:</b> {transformations_display}.</div>
+              <div><b>{action_name} Applied:</b> {transformations_display}.</div>
               <div style="margin-top: 4px;"><b>Sanitized Query:</b> &ldquo;{sanitized_query_text}&rdquo;.</div>
               <div style="margin-top: 4px;"><b>Mathematical Leakage Check:</b> Outgoing payload scanned for raw {raw_pii_summary}: <b>0.0% Leakage (Verified Safe)</b>.</div>
             </div>
@@ -557,12 +559,33 @@ if st.session_state.get("sim_has_executed", False):
             </div>
             """, unsafe_allow_html=True)
         else:
+            if active_action == "TOKENIZE":
+                step6_active_badge = f"""
+                <div style="margin-top: 8px; padding: 8px 12px; background: rgba(16, 185, 129, 0.12); border-left: 3px solid #10B981; border-radius: 4px; font-size: 0.88rem;">
+                  <b>⚡ Solution in Action (TOKENIZE):</b> The firewall token vault caught the returning response and re-hydrated {raw_pii_summary} back into AI agent memory! The external third-party tool only saw synthetic surrogate tokens, preventing network leakage while preserving full AI reasoning capability.
+                </div>
+                """
+            elif active_action == "MASK":
+                step6_active_badge = f"""
+                <div style="margin-top: 8px; padding: 8px 12px; background: rgba(59, 130, 246, 0.12); border-left: 3px solid #3B82F6; border-radius: 4px; font-size: 0.88rem;">
+                  <b>🛡️ Solution in Action (MASK):</b> Third-party tool executed with safe partial masking (e.g. <code>s***h@gmail.com</code>). Outgoing and incoming parameters are verified free of cleartext PII.
+                </div>
+                """
+            else:
+                step6_active_badge = f"""
+                <div style="margin-top: 8px; padding: 8px 12px; background: rgba(236, 72, 153, 0.12); border-left: 3px solid #EC4899; border-radius: 4px; font-size: 0.88rem;">
+                  <b>🔒 Solution in Action (REDACT):</b> Sensitive values were permanently stripped before tool execution. Zero sensitive data existed in external tool memory.
+                </div>
+                """
+
             st.markdown(f"""
             <div class="step-card" style="border-left: 4px solid #10B981;">
               <div class="step-title">6️⃣ STEP 6: Response Interception & Token Restoration</div>
               <div>Firewall catches the returning response.</div>
-              <div style="margin-top: 6px;">&bull; If <b>TOKENIZE</b> was chosen: Re-hydrates {raw_pii_summary} back into agent memory.</div>
-              <div style="margin-top: 4px;">&bull; If <b>MASK</b> was chosen: Confirms response is clean and safe without speculative replacements.</div>
+              <div style="margin-top: 6px;">&bull; If <b>TOKENIZE</b>: Re-hydrates {raw_pii_summary} back into agent memory.</div>
+              <div style="margin-top: 4px;">&bull; If <b>MASK</b>: Confirms response is clean and safe without speculative replacements.</div>
+              <div style="margin-top: 4px;">&bull; If <b>REDACT</b>: Confirms irreversible data removal across boundary.</div>
+              {step6_active_badge}
             </div>
             """, unsafe_allow_html=True)
 
@@ -576,9 +599,17 @@ if st.session_state.get("sim_has_executed", False):
             </div>
             """, unsafe_allow_html=True)
         else:
+            if active_action == "TOKENIZE":
+                solution_summary_note = "<b>Zero-Leakage Context Preservation:</b> AI agent resumes autonomous workflow with full context intact, while zero cleartext PII ever crossed the external network boundary!"
+            elif active_action == "MASK":
+                solution_summary_note = "<b>Format-Preserving Obfuscation:</b> External tool completed its operation while identity details remained protected!"
+            else:
+                solution_summary_note = "<b>Strict Data Minimization:</b> Sensitive identifiers permanently expunged for maximum regulatory compliance!"
+
             st.markdown(f"""
             <div class="step-card" style="border-left: 4px solid #059669;">
               <div class="step-title">7️⃣ STEP 7: Final Safe Result Delivered to AI Agent</div>
-              <div>AI agent receives the confirmed response and resumes its autonomous workflow without having leaked {raw_pii_summary} across the network boundary!</div>
+              <div>AI agent receives the confirmed response without having leaked {raw_pii_summary} across the network boundary!</div>
+              <div style="margin-top: 6px; font-size: 0.85rem; color: #059669;">{solution_summary_note}</div>
             </div>
             """, unsafe_allow_html=True)

@@ -1,7 +1,5 @@
 # 🛡️ PII Firewall for AI Agents
 
-> **MITK AI VISION 24H National Level Hackathon**  
-> **Problem Statement:** PII Firewall for AI Agents — Protect sensitive information sent to external tools.
 
 ---
 
@@ -110,11 +108,3 @@ This project was engineered through a 3-agent autonomous role distribution:
 - 🎨 **Prototype & UI Engineer (`prototype_builder`)**: Real-time Streamlit dashboard (`app.py`), in-browser live test runner with visual metrics breakdown, REST microservice server (`server.py`), and CLI tool (`cli.py`).
 
 ---
-
-## 🗓️ Hackathon Progress & Timeline
-
-- [x] **Phase I (1:00 PM – 5:00 PM)**: Ideation, Architecture, Core Engine, Unit & E2E Tests, Benchmark, Terminal Demo.
-- [x] **Phase II (5:30 PM – 7:30 PM)**: Interactive Streamlit Web UI Dashboard, Extended Recognizers (Cloud API Keys, IP Addresses, Indian PAN & Aadhaar with Verhoeff Checksum), Agent SDK Decorator Adapter (`@protect_tool`).
-- [x] **Phase III (8:30 PM – 12:00 AM)**: Granular Multi-Action Policy Engine (Tokenize, Redact, Mask, Block), Adversarial Evasion Defenses (Zero-width chars, Base64 smuggling), Privacy-Safe Compliance Audit Logger with Tamper-Evident SHA-256 Hashes.
-- [x] **Phase IV (12:30 AM – 7:30 AM)**: REST API Microservice Gateway (`/v1/intercept`, `/v1/restore`), High-Throughput Concurrency Benchmark (>3.5k req/s), Standalone CLI Utility (`pii-firewall`), Production Packaging (`pyproject.toml`).
-- [x] **Multi-Agent Scale & Final Evaluation (8:30 AM – 11:45 AM)**: Automated test matrix expanded to **312 tests (100% pass rate)**, in-browser test suite runner in Streamlit dashboard, Jury Presentation Script ([`docs/DAY_2_PRESENTATION_GUIDE.md`](docs/DAY_2_PRESENTATION_GUIDE.md)), Ready for Winning Evaluation!

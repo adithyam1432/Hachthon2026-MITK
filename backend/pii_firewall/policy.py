@@ -7,6 +7,7 @@ Security Principles Enforced:
   C. Confidential Business Information: Destination-Aware Controls & Allowlists.
 """
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Set, Union
@@ -101,7 +102,26 @@ def generate_masked_value(value: str, pii_type: Union[PIIType, str]) -> str:
         return f"******{value[-4:]}" if len(value) >= 4 else "[REDACTED_ACCOUNT]"
 
     elif pii_type == PIIType.DATE_OF_BIRTH:
+        if len(value) >= 8 and ("-" in value or "/" in value or "." in value):
+            parts = re.split(r"[-/.]", value)
+            if len(parts) == 3:
+                if len(parts[0]) == 4:
+                    return f"****-**-{parts[2]}"
+                elif len(parts[2]) == 4:
+                    return f"{parts[0]}-**-****"
         return "[DOB_REDACTED]"
+
+    elif pii_type == PIIType.PERSON_NAME:
+        parts = value.split()
+        if parts:
+            masked_parts = [f"{p[0]}***" if len(p) > 1 else p for p in parts]
+            return " ".join(masked_parts)
+        return "[NAME_REDACTED]"
+
+    elif pii_type == PIIType.DRIVERS_LICENSE:
+        if len(value) >= 6:
+            return f"{value[:3]}*****{value[-3:]}"
+        return "[DL_REDACTED]"
 
     elif pii_type == PIIType.SALARY_INFO:
         return "[SALARY_REDACTED]"

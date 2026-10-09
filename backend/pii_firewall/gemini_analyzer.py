@@ -89,6 +89,14 @@ GEMINI_TYPE_MAP: Dict[str, PIIType] = {
     "PASSPORT": PIIType.PASSPORT,
     "DATE_OF_BIRTH": PIIType.DATE_OF_BIRTH,
     "DOB": PIIType.DATE_OF_BIRTH,
+    "BIRTH_DATE": PIIType.DATE_OF_BIRTH,
+    "PERSON_NAME": PIIType.PERSON_NAME,
+    "NAME": PIIType.PERSON_NAME,
+    "FULL_NAME": PIIType.PERSON_NAME,
+    "CUSTOMER_NAME": PIIType.PERSON_NAME,
+    "DRIVERS_LICENSE": PIIType.DRIVERS_LICENSE,
+    "DRIVER_LICENSE": PIIType.DRIVERS_LICENSE,
+    "DL": PIIType.DRIVERS_LICENSE,
     "HOME_ADDRESS": PIIType.HOME_ADDRESS,
     "ADDRESS": PIIType.HOME_ADDRESS,
     "BANK_ACCOUNT": PIIType.BANK_ACCOUNT,
@@ -119,6 +127,9 @@ Categories to detect:
 - SSN: US Social Security Numbers
 - PASSPORT: International passport numbers
 - BANK_ACCOUNT: Bank account numbers
+- PERSON_NAME: Full names of customers, individuals, patients, employees
+- DATE_OF_BIRTH: Dates of birth (DOB)
+- DRIVERS_LICENSE: Driver's license numbers
 
 CRITICAL FALSE-POSITIVE RULES:
 - Operational scheduling parameters like "3pm", "3 pm", "9am", "tomorrow", "31st nov", "1st jan" are NOT PII and must NEVER be flagged.
@@ -129,13 +140,14 @@ Return pure JSON conforming exactly to this structure:
   "entities": [
     {
       "value": "<exact substring extracted from input>",
-      "type": "EMAIL | AADHAAR | PAN_CARD | PHONE | CREDIT_CARD | PIN | PASSWORD | CVV | OTP | API_KEY | SSN | PASSPORT | BANK_ACCOUNT",
+      "type": "EMAIL | AADHAAR | PAN_CARD | PHONE | CREDIT_CARD | PIN | PASSWORD | CVV | OTP | API_KEY | SSN | PASSPORT | BANK_ACCOUNT | PERSON_NAME | DATE_OF_BIRTH | DRIVERS_LICENSE",
       "confidence": 0.98,
       "context": "<brief reason or context explaining why this is sensitive>"
     }
   ]
 }
 """
+
 
 
 class GeminiPIIAnalyzer:

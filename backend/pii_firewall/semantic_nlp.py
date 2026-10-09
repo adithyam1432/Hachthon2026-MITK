@@ -78,6 +78,16 @@ SYNONYM_MAPPINGS: Dict[PIIType, List[str]] = {
         "dob", "birth date", "date of birth", "born on", "birthday",
         "birthdate", "natal date"
     ],
+    PIIType.DRIVERS_LICENSE: [
+        "driver's license", "drivers license", "driver license", "driving license",
+        "dl number", "dl no", "dl num", "driver license number", "dl",
+        "driver's license no", "driver's licence", "driving licence"
+    ],
+    PIIType.PERSON_NAME: [
+        "customer name", "client name", "user name", "patient name", "applicant name",
+        "individual name", "full name", "employee name", "profile for", "record for",
+        "account holder", "member name"
+    ],
     PIIType.HOME_ADDRESS: [
         "residential address", "home location", "permanent address",
         "living address", "home address", "house address", "delivery address",
@@ -174,6 +184,16 @@ class ContextAwareNLPEngine:
         "november", "december", "january", "schedule", "leave",
         "port 8080", "port 443", "year 2024", "year 2025", "year 2026",
         "model 4821", "order 4821", "room 4821", "suite 4821", "flight 4821"
+    }
+
+    NAME_STOPWORDS = {
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        "january", "february", "march", "april", "may", "june", "july", "august",
+        "september", "october", "november", "december",
+        "general", "motors", "production", "environment", "new", "york", "united", "states",
+        "next", "quarter", "project", "schedule", "meeting", "system", "service", "cloud",
+        "customer", "service", "terms", "conditions", "privacy", "policy", "internal", "external",
+        "spring", "summer", "autumn", "winter", "north", "south", "east", "west"
     }
 
     @staticmethod
@@ -517,6 +537,77 @@ class ContextAwareNLPEngine:
                     has_exposed_value=True
                 )
             )
+
+        # Date of Birth (DOB) in context
+        dob_cand_pattern = re.compile(
+            r"(?i:(?:DOB|birth\s*date|date\s*of\s*birth|born\s*on|born|birthday|birthdate)\s*(?:is|was|:|=|->|\s)\s*)"
+            r"(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4})",
+            re.IGNORECASE
+        )
+        for m in dob_cand_pattern.finditer(text):
+            cand_val = m.group(1).strip()
+            start_pos, end_pos = m.start(1), m.end(1)
+            if not any(e.start == start_pos and e.end == end_pos for e in entities):
+                entities.append(
+                    PIIEntity(
+                        pii_type=PIIType.DATE_OF_BIRTH,
+                        start=start_pos,
+                        end=end_pos,
+                        value=cand_val,
+                        confidence=0.96,
+                        category=SensitivityCategory.PERSONAL_INFO,
+                        context_evidence="Date of birth context with valid date structure",
+                        has_exposed_value=True
+                    )
+                )
+
+        # Driver's License in context
+        dl_cand_pattern = re.compile(
+            r"(?i:(?:driver\'?s?\s*licen[sc]e|driving\s*licen[sc]e|dl\s*num(?:ber)?|dl\s*no\.?|dl)\s*(?:is|was|:|=|->|#|\s)\s*)"
+            r"([A-Za-z0-9][A-Za-z0-9\s-]{4,18}[A-Za-z0-9])",
+            re.IGNORECASE
+        )
+        for m in dl_cand_pattern.finditer(text):
+            cand_val = m.group(1).strip()
+            start_pos, end_pos = m.start(1), m.end(1)
+            if any(c.isdigit() for c in cand_val) and cand_val.lower() not in cls.OPERATIONAL_STOPWORDS:
+                if not any(e.start == start_pos and e.end == end_pos for e in entities):
+                    entities.append(
+                        PIIEntity(
+                            pii_type=PIIType.DRIVERS_LICENSE,
+                            start=start_pos,
+                            end=end_pos,
+                            value=cand_val,
+                            confidence=0.97,
+                            category=SensitivityCategory.PERSONAL_INFO,
+                            context_evidence="Driver's License identifier context",
+                            has_exposed_value=True
+                        )
+                    )
+
+        # Person Name in context (2 to 4 capitalized tokens following customer/profile/name contextual cues)
+        name_cand_pattern = re.compile(
+            r"(?i:(?:(?:customer|user|client|employee|patient|individual|applicant|profile|member|account(?:\s+holder)?)\s*(?:onboarding\s+)?(?::|=|->|\s+(?:name\s*(?:is|was|:|=|->)?|profile\s+for|record\s+for|for\s+))|(?:full\s+)?name\s*(?:is|was|:|=|->)?|named\s+|profile\s+for\s+|record\s+for\s+|onboarding\s+(?:profile\s+)?for\s+|(?:Mr|Mrs|Ms|Miss|Dr|Prof)\.?\s*)\s*)"
+            r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})"
+        )
+        for m in name_cand_pattern.finditer(text):
+            cand_val = m.group(1).strip()
+            start_pos, end_pos = m.start(1), m.end(1)
+            words = cand_val.lower().split()
+            if not any(w in cls.NAME_STOPWORDS for w in words):
+                if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
+                    entities.append(
+                        PIIEntity(
+                            pii_type=PIIType.PERSON_NAME,
+                            start=start_pos,
+                            end=end_pos,
+                            value=cand_val,
+                            confidence=0.95,
+                            category=SensitivityCategory.PERSONAL_INFO,
+                            context_evidence="Full person name identified via contextual role/name indicators",
+                            has_exposed_value=True
+                        )
+                    )
 
         # -------------------------------------------------------------
         # H. Indian Identifiers Context Analysis (Aadhaar & PAN)

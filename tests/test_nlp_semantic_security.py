@@ -445,6 +445,84 @@ class TestNLPSemanticSecurity(unittest.TestCase):
         self.assertEqual(len(pan_entities), 1)
         self.assertEqual(pan_entities[0].value, "ABCPE1234F")
 
+    # -----------------------------------------------------------------
+    # Acceptance Test 25: Context-Aware Name, DOB, and Driver's License
+    # -----------------------------------------------------------------
+    def test_25_context_aware_name_dob_and_drivers_license(self):
+        """Validates detection of Person Name, Date of Birth, and Driver's License in context."""
+        text = "Customer name: Jane Smith, born on 12/04/1990, driving license: D12345678"
+        entities = ContextAwareNLPEngine.find_semantic_entities(text)
+        types_found = {e.pii_type: e.value for e in entities}
+        self.assertIn(PIIType.PERSON_NAME, types_found)
+        self.assertEqual(types_found[PIIType.PERSON_NAME], "Jane Smith")
+        self.assertIn(PIIType.DATE_OF_BIRTH, types_found)
+        self.assertEqual(types_found[PIIType.DATE_OF_BIRTH], "12/04/1990")
+        self.assertIn(PIIType.DRIVERS_LICENSE, types_found)
+        self.assertEqual(types_found[PIIType.DRIVERS_LICENSE], "D12345678")
+
+    # -----------------------------------------------------------------
+    # Acceptance Test 26: Customer Onboarding Multi-PII Query (User's Exact Benchmark)
+    # -----------------------------------------------------------------
+    def test_26_customer_onboarding_multi_pii_query(self):
+        """End-to-end tokenization and response restoration for customer onboarding query with 4 distinct PII types."""
+        query = (
+            "Please process the customer onboarding profile for John Michael Doe "
+            "(SSN: 123-45-6789, DOB: 1985-04-12, Driver's License: DL-987654321"
+        )
+        payload = {"tool": "customer_onboarding_tool", "arguments": {"query": query}}
+        result, vault = self.firewall.intercept_request(payload)
+
+        # 1. Assert all 4 PII entities are detected in metrics
+        counts = result.metrics.counts_by_type
+        self.assertIn("PERSON_NAME", counts)
+        self.assertIn("SSN", counts)
+        self.assertIn("DATE_OF_BIRTH", counts)
+        self.assertIn("DRIVERS_LICENSE", counts)
+
+        # 2. Assert sanitized payload contains ZERO raw PII
+        sanitized_text = result.sanitized_payload["arguments"]["query"]
+        self.assertNotIn("John Michael Doe", sanitized_text)
+        self.assertNotIn("123-45-6789", sanitized_text)
+        self.assertNotIn("1985-04-12", sanitized_text)
+        self.assertNotIn("DL-987654321", sanitized_text)
+
+        # 3. Assert tokens are properly formed
+        self.assertIn("⟦PERSON_NAME_", sanitized_text)
+        self.assertIn("⟦SSN_", sanitized_text)
+        self.assertIn("⟦DATE_OF_BIRTH_", sanitized_text)
+        self.assertIn("⟦DRIVERS_LICENSE_", sanitized_text)
+
+        # 4. Assert round-trip restoration restores 100% of the original prompt
+        restored_payload, _ = self.firewall.intercept_response(
+            result.sanitized_payload,
+            request_id=result.metrics.request_id
+        )
+        self.assertEqual(restored_payload["arguments"]["query"], query)
+
+    # -----------------------------------------------------------------
+    # Acceptance Test 27: Customer Onboarding Policy Masking Mode
+    # -----------------------------------------------------------------
+    def test_27_customer_onboarding_policy_masking(self):
+        """Verifies policy masking mode replaces Name, SSN, DOB, and DL with correct partial masks."""
+        policy = PolicyEngine(default_action=PolicyAction.MASK)
+        fw = PIIFirewall(
+            config=FirewallConfig(enable_semantic_nlp=True),
+            policy_engine=policy
+        )
+        query = (
+            "Please process the customer onboarding profile for John Michael Doe "
+            "(SSN: 123-45-6789, DOB: 1985-04-12, Driver's License: DL-987654321"
+        )
+        payload = {"tool": "customer_onboarding_tool", "arguments": {"query": query}}
+        result, _ = fw.intercept_request(payload)
+
+        masked_text = result.sanitized_payload["arguments"]["query"]
+        self.assertIn("J*** M*** D***", masked_text)
+        self.assertIn("***-**-6789", masked_text)
+        self.assertIn("****-**-12", masked_text)
+        self.assertIn("DL-*****321", masked_text)
+
 
 if __name__ == "__main__":
     unittest.main()
+

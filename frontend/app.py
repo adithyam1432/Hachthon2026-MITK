@@ -171,11 +171,13 @@ def extract_tool_call_from_prompt(prompt_str: str) -> dict:
 
     lower = prompt_str.lower()
     tool_name = "send_email"
-    if any(k in lower for k in ["pin", "atm", "password", "credential", "assistant"]):
+    if lower.startswith("send email") or "send email" in lower or "email" in lower:
+        tool_name = "send_email"
+    elif any(k in lower for k in ["pin", "atm", "password", "credential", "assistant"]):
         tool_name = "external_assistant"
     elif any(k in lower for k in ["card", "credit", "pay", "charge", "stripe", "billing"]):
         tool_name = "stripe_payment"
-    elif any(k in lower for k in ["aadhaar", "pan", "kyc", "identity"]):
+    elif any(k in lower for k in ["aadhaar", "aadhar", "adhaar", "adhar", "pan", "kyc", "identity"]):
         tool_name = "kyc_verify"
     elif any(k in lower for k in ["crm", "customer", "contact", "salesforce"]):
         tool_name = "crm_service"
@@ -311,6 +313,19 @@ if st.session_state.get("sim_has_executed", False):
     except Exception:
         pass
 
+    # Deduplicate overlapping entities and sort by position in text
+    pre_detected_entities.sort(key=lambda e: (e.end - e.start, e.confidence), reverse=True)
+    deduped_entities = []
+    for cand in pre_detected_entities:
+        overlap = False
+        for chosen in deduped_entities:
+            if not (cand.end <= chosen.start or cand.start >= chosen.end):
+                overlap = True
+                break
+        if not overlap:
+            deduped_entities.append(cand)
+    deduped_entities.sort(key=lambda e: e.start)
+
     sim_start_time = time.perf_counter()
     sim_blocked = False
     sim_block_reason = ""
@@ -359,27 +374,52 @@ if st.session_state.get("sim_has_executed", False):
     st.markdown("---")
     st.markdown("### ⚡ Live Output Generated After Clicking [ Send ]")
 
-    # Extract values for dynamic formatting
-    if pre_detected_entities:
-        target_ent = pre_detected_entities[0]
-        raw_pii = target_ent.value
-        type_str = target_ent.pii_type.value if hasattr(target_ent.pii_type, "value") else str(target_ent.pii_type)
-        conf_str = f"{int(target_ent.confidence * 100)}%"
-        cat_enum = getattr(target_ent, "category", TYPE_TO_CATEGORY.get(target_ent.pii_type, SensitivityCategory.PERSONAL_INFO))
-        cat_str = cat_enum.value if hasattr(cat_enum, "value") else str(cat_enum)
-    else:
-        raw_pii = "sharath@gmail.com"
-        type_str = "EMAIL"
-        conf_str = "99%"
-        cat_str = "PERSONAL_INFO"
-
+    # Extract dynamic formatting data for all detected entities
     sanitized_query_text = fw_res.sanitized_payload["arguments"]["query"] if fw_res else active_prompt
-    if active_action == "MASK":
-        masked_pii = generate_masked_value(raw_pii, target_ent.pii_type) if pre_detected_entities else "s***h@gmail.com"
-    elif active_action == "TOKENIZE":
-        masked_pii = list(vault_tokens_map.keys())[0] if vault_tokens_map else "⟦EMAIL_a1b2c3d4⟧"
+
+    if deduped_entities:
+        # Step 1 Items HTML
+        items_detected_html = []
+        for ent in deduped_entities:
+            t_str = ent.pii_type.value if hasattr(ent.pii_type, "value") else str(ent.pii_type)
+            cat_enum = getattr(ent, "category", TYPE_TO_CATEGORY.get(ent.pii_type, SensitivityCategory.PERSONAL_INFO))
+            cat_str = cat_enum.value if hasattr(cat_enum, "value") else str(cat_enum)
+            items_detected_html.append(
+                f'<div style="margin-top: 4px;"><b>Detected Item:</b> 🔴 {t_str}: <code>{ent.value}</code> '
+                f'<span style="font-size: 0.82rem; color: #64748B;">({cat_str})</span></div>'
+            )
+        detected_items_display = "".join(items_detected_html)
+
+        # Step 2 Targets HTML
+        targets_discovered_html = []
+        for ent in deduped_entities:
+            t_str = ent.pii_type.value if hasattr(ent.pii_type, "value") else str(ent.pii_type)
+            conf_str = f"{int(ent.confidence * 100)}%"
+            ev_str = f" &bull; <i>{ent.context_evidence}</i>" if getattr(ent, "context_evidence", None) else ""
+            targets_discovered_html.append(
+                f'<div style="margin-top: 4px;"><b>Target Discovered:</b> <code>{ent.value}</code> classified as <code>PIIType.{t_str}</code> (Confidence: {conf_str}){ev_str}.</div>'
+            )
+        targets_display = "".join(targets_discovered_html)
+
+        # Step 3 Transformations HTML
+        transforms_list = []
+        for ent in deduped_entities:
+            t_str = ent.pii_type.value if hasattr(ent.pii_type, "value") else str(ent.pii_type)
+            if active_action == "MASK":
+                m_val = generate_masked_value(ent.value, ent.pii_type)
+            elif active_action == "TOKENIZE":
+                m_val = vault.get_or_create_token(ent.value, ent.pii_type) if vault else f"⟦{t_str}_token⟧"
+            else:
+                m_val = f"[REDACTED_{t_str}]"
+            transforms_list.append(f"<code>{ent.value}</code> ➔ <code>{m_val}</code>")
+        transformations_display = ", ".join(transforms_list)
+
+        raw_pii_summary = ", ".join([f"<code>{e.value}</code>" for e in deduped_entities])
     else:
-        masked_pii = f"[REDACTED_{type_str}]"
+        detected_items_display = '<div style="margin-top: 4px;"><b>Detected Item:</b> 🟢 No PII detected</div>'
+        targets_display = '<div style="margin-top: 4px;"><b>Target Discovered:</b> Zero sensitive entities found in query.</div>'
+        transformations_display = "None required"
+        raw_pii_summary = "sensitive values"
 
     # 1️⃣ STEP 1: User Prompt Received by AI Agent
     with st.container():
@@ -387,8 +427,7 @@ if st.session_state.get("sim_has_executed", False):
         <div class="step-card" style="border-left: 4px solid #3B82F6;">
           <div class="step-title">1️⃣ STEP 1: User Prompt Received by AI Agent</div>
           <div><b>Input Query:</b> &ldquo;{active_prompt}&rdquo;</div>
-          <div style="margin-top: 4px;"><b>Detected Item:</b> 🔴 {type_str}: <code>{raw_pii}</code></div>
-          <div style="margin-top: 4px; font-size: 0.82rem; color: #64748B;"><b>Security Classification:</b> {cat_str}</div>
+          {detected_items_display}
         </div>
         """, unsafe_allow_html=True)
 
@@ -398,7 +437,7 @@ if st.session_state.get("sim_has_executed", False):
         <div class="step-card" style="border-left: 4px solid #10B981;">
           <div class="step-title">2️⃣ STEP 2: Whole-Prompt PII Detection & Safety Inspection</div>
           <div><b>Recursive Scanner:</b> Scans the whole prompt across email, phone, SSN, credit cards, Aadhaar, PAN, and cloud secret recognizers.</div>
-          <div style="margin-top: 4px;"><b>Target Discovered:</b> <code>{raw_pii}</code> classified as <code>PIIType.{type_str}</code> (Confidence: {conf_str}).</div>
+          {targets_display}
           <div style="margin-top: 4px;"><b>False-Positive Prevention:</b> The terms &ldquo;3pm&rdquo; and &ldquo;31st nov&rdquo; are analyzed by the phone and date evaluators and verified as non-PII operational scheduling parameters (not misidentified as phone numbers or identifiers!).</div>
           <div style="margin-top: 4px;"><b>Adversarial Sanitization:</b> Zero-width Unicode stripping and Base64 bypass checks pass clean.</div>
         </div>
@@ -420,9 +459,9 @@ if st.session_state.get("sim_has_executed", False):
             st.markdown(f"""
             <div class="step-card" style="border-left: 4px solid #8B5CF6;">
               <div class="step-title">3️⃣ STEP 3: Privacy Transformation Applied ({active_action})</div>
-              <div><b>Masking Applied:</b> <code>{raw_pii}</code> ➔ <code>{masked_pii}</code>.</div>
+              <div><b>Masking Applied:</b> {transformations_display}.</div>
               <div style="margin-top: 4px;"><b>Sanitized Query:</b> &ldquo;{sanitized_query_text}&rdquo;.</div>
-              <div style="margin-top: 4px;"><b>Mathematical Leakage Check:</b> Outgoing payload scanned for raw {raw_pii}: <b>0.0% Leakage (Verified Safe)</b>.</div>
+              <div style="margin-top: 4px;"><b>Mathematical Leakage Check:</b> Outgoing payload scanned for raw {raw_pii_summary}: <b>0.0% Leakage (Verified Safe)</b>.</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -479,7 +518,7 @@ if st.session_state.get("sim_has_executed", False):
             <div class="step-card" style="border-left: 4px solid #10B981;">
               <div class="step-title">6️⃣ STEP 6: Response Interception & Token Restoration</div>
               <div>Firewall catches the returning response.</div>
-              <div style="margin-top: 6px;">&bull; If <b>TOKENIZE</b> was chosen: Re-hydrates <code>{raw_pii}</code> back into agent memory.</div>
+              <div style="margin-top: 6px;">&bull; If <b>TOKENIZE</b> was chosen: Re-hydrates {raw_pii_summary} back into agent memory.</div>
               <div style="margin-top: 4px;">&bull; If <b>MASK</b> was chosen: Confirms response is clean and safe without speculative replacements.</div>
             </div>
             """, unsafe_allow_html=True)
@@ -497,6 +536,6 @@ if st.session_state.get("sim_has_executed", False):
             st.markdown(f"""
             <div class="step-card" style="border-left: 4px solid #059669;">
               <div class="step-title">7️⃣ STEP 7: Final Safe Result Delivered to AI Agent</div>
-              <div>AI agent receives the confirmed response and resumes its autonomous workflow without having leaked <code>{raw_pii}</code> across the network boundary!</div>
+              <div>AI agent receives the confirmed response and resumes its autonomous workflow without having leaked {raw_pii_summary} across the network boundary!</div>
             </div>
             """, unsafe_allow_html=True)

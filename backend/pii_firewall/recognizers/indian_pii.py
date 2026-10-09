@@ -84,7 +84,7 @@ class AadhaarRecognizer(BasePIIRecognizer):
       - Must pass UIDAI Verhoeff Checksum algorithm.
     """
 
-    AADHAAR_PATTERN = re.compile(r'\b([2-9]\d{3}[ -]?\d{4}[ -]?\d{4})\b')
+    AADHAAR_PATTERN = re.compile(r'(?<!\d)([2-9]\d{3}[ -]?\d{4}[ -]?\d{4})(?![ -]?\d)')
 
     def __init__(self, check_verhoeff: bool = True):
         super().__init__(PIIType.AADHAAR)
@@ -108,8 +108,8 @@ class AadhaarRecognizer(BasePIIRecognizer):
             entities.append(
                 PIIEntity(
                     pii_type=self.pii_type,
-                    start=match.start(),
-                    end=match.end(),
+                    start=match.start(1),
+                    end=match.end(1),
                     value=raw_val,
                     confidence=0.98,
                 )

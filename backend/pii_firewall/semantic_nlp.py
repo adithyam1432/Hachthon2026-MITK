@@ -104,6 +104,20 @@ SYNONYM_MAPPINGS: Dict[PIIType, List[str]] = {
         "account details", "checking account", "savings account", "iban",
         "routing number", "ach account", "bank account"
     ],
+    PIIType.AADHAAR: [
+        "aadhaar", "aadhaar number", "aadhaar no", "aadhaar num", "aadhaar card", "aadhaar id",
+        "aadhar", "aadhar number", "aadhar no", "aadhar num", "aadhar card", "aadhar id",
+        "adhaar", "adhaar number", "adhaar no", "adhaar num", "adhaar card", "adhaar id",
+        "adhar", "adhar number", "adhar card", "adhar no", "adhar num", "adhar id",
+        "uidai", "uidai number", "uidai no", "uidai num", "uidai id",
+        "uid number", "uid no", "uid num",
+        "my aadhaar", "my aadhar", "my adhaar", "my adhar",
+        "national id", "indian uid"
+    ],
+    PIIType.PAN_CARD: [
+        "pan card", "pan number", "pan no", "pan num", "permanent account number",
+        "my pan", "pan id", "income tax pan", "tax pan"
+    ],
 
     # Confidential Business Information
     PIIType.CONFIDENTIAL_SOURCE_CODE: [
@@ -500,6 +514,105 @@ class ContextAwareNLPEngine:
                     confidence=0.95,
                     category=SensitivityCategory.PERSONAL_INFO,
                     context_evidence="Salary / remuneration context",
+                    has_exposed_value=True
+                )
+            )
+
+        # -------------------------------------------------------------
+        # H. Indian Identifiers Context Analysis (Aadhaar & PAN)
+        # -------------------------------------------------------------
+        # 1. Aadhaar Number (12 digits with spaces/hyphens or continuous, resilient to boundaries)
+        aadhaar_cand_pattern = re.compile(r"(?<!\d)([2-9]\d{3}[ -]?\d{4}[ -]?\d{4})(?![ -]?\d)")
+        for match in aadhaar_cand_pattern.finditer(text):
+            cand_val = match.group(1)
+            start_pos, end_pos = match.start(1), match.end(1)
+
+            if any(e.start == start_pos and e.end == end_pos for e in entities):
+                continue
+
+            digits = re.sub(r"\D", "", cand_val)
+            if len(digits) != 12:
+                continue
+
+            ctx_start = max(0, start_pos - cls.CONTEXT_WINDOW_CHARS)
+            ctx_end = min(len(text), end_pos + cls.CONTEXT_WINDOW_CHARS)
+            context_window = text[ctx_start:ctx_end].lower()
+
+            # False-positive check: operational codes
+            if any(stopword in context_window for stopword in cls.OPERATIONAL_STOPWORDS):
+                if "order " + cand_val in context_window or "port " + cand_val in context_window:
+                    continue
+
+            matched_aadhaar_syn = None
+            if PIIType.AADHAAR in COMPILED_SYNONYMS:
+                for pat in COMPILED_SYNONYMS[PIIType.AADHAAR]:
+                    if pat.search(context_window):
+                        matched_aadhaar_syn = pat.pattern
+                        break
+
+            # If Aadhaar context is present in the surrounding text:
+            if matched_aadhaar_syn:
+                from pii_firewall.recognizers.indian_pii import verhoeff_validate
+                is_v_valid = verhoeff_validate(digits)
+
+                # Check entity relationships (e.g. Sharath's Aadhaar, My Aadhaar)
+                related_entity = None
+                for subject, pred, val in cls.extract_entity_relationships(text):
+                    if val == cand_val or any(s in pred for s in ["aadhaar", "aadhar", "adhaar", "adhar", "uidai"]):
+                        related_entity = subject
+                        break
+
+                evidence = f"Surrounded by Aadhaar context ({matched_aadhaar_syn})"
+                if is_v_valid:
+                    evidence += " [Verhoeff Validated]"
+
+                entities.append(
+                    PIIEntity(
+                        pii_type=PIIType.AADHAAR,
+                        start=start_pos,
+                        end=end_pos,
+                        value=cand_val,
+                        confidence=0.99 if is_v_valid else 0.98,
+                        category=SensitivityCategory.PERSONAL_INFO,
+                        context_evidence=evidence,
+                        related_entity=related_entity,
+                        has_exposed_value=True
+                    )
+                )
+
+        # 2. PAN Card Context Analysis
+        pan_cand_pattern = re.compile(r"(?<![A-Z0-9])([A-Z]{3}[PCHFATBLJG][A-Z]\d{4}[A-Z])(?![A-Z0-9])", re.IGNORECASE)
+        for match in pan_cand_pattern.finditer(text):
+            cand_val = match.group(1).upper()
+            start_pos, end_pos = match.start(1), match.end(1)
+
+            if any(e.start == start_pos and e.end == end_pos for e in entities):
+                continue
+
+            ctx_start = max(0, start_pos - cls.CONTEXT_WINDOW_CHARS)
+            ctx_end = min(len(text), end_pos + cls.CONTEXT_WINDOW_CHARS)
+            context_window = text[ctx_start:ctx_end].lower()
+
+            matched_pan_syn = None
+            if PIIType.PAN_CARD in COMPILED_SYNONYMS:
+                for pat in COMPILED_SYNONYMS[PIIType.PAN_CARD]:
+                    if pat.search(context_window):
+                        matched_pan_syn = pat.pattern
+                        break
+
+            evidence = "Valid Indian PAN format (Entity 4th char verified)"
+            if matched_pan_syn:
+                evidence += f" surrounded by context ({matched_pan_syn})"
+
+            entities.append(
+                PIIEntity(
+                    pii_type=PIIType.PAN_CARD,
+                    start=start_pos,
+                    end=end_pos,
+                    value=cand_val,
+                    confidence=0.99,
+                    category=SensitivityCategory.PERSONAL_INFO,
+                    context_evidence=evidence,
                     has_exposed_value=True
                 )
             )

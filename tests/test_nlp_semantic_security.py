@@ -395,6 +395,56 @@ class TestNLPSemanticSecurity(unittest.TestCase):
             serialized_log = str(log)
             self.assertNotIn(raw_cvv, serialized_log, "Raw CVV leaked in audit log!")
 
+    # -----------------------------------------------------------------
+    # Acceptance Test 22: Context-Aware Aadhaar NLP Detection
+    # -----------------------------------------------------------------
+    def test_22_context_aware_aadhaar_nlp_detection(self):
+        """NLP context recognizes Aadhaar with various spellings and attached boundaries."""
+        queries = [
+            "WITH BODY MY ADHAAR NUM 342432569881AT 3pm",
+            "my aadhar card 3424 3256 9881",
+            "UIDAI no 3424-3256-9881",
+            "Adhaar number: 342432569881."
+        ]
+        for q in queries:
+            entities = ContextAwareNLPEngine.find_semantic_entities(q)
+            aadhaar_entities = [e for e in entities if e.pii_type == PIIType.AADHAAR]
+            self.assertGreaterEqual(len(aadhaar_entities), 1, f"Failed to detect Aadhaar in '{q}'")
+            self.assertIn("3424", aadhaar_entities[0].value)
+
+    # -----------------------------------------------------------------
+    # Acceptance Test 23: Combined Email & Aadhaar Prompt Masking
+    # -----------------------------------------------------------------
+    def test_23_combined_email_and_aadhaar_prompt_masking(self):
+        """Full end-to-end test on prompt containing both email and Aadhaar with scheduling stopwords."""
+        policy = PolicyEngine(default_action=PolicyAction.MASK)
+        fw = PIIFirewall(
+            config=FirewallConfig(enable_semantic_nlp=True),
+            policy_engine=policy
+        )
+        prompt = "send email to sharath@gmail.com WITH BODY MY ADHAAR NUM 342432569881AT 3pm with subject i will be leave on the 31st nov due to personal issue"
+        payload = {"tool": "send_email", "arguments": {"query": prompt}}
+        result, vault = fw.intercept_request(payload)
+
+        sanitized_q = result.sanitized_payload["arguments"]["query"]
+        self.assertNotIn("sharath@gmail.com", sanitized_q)
+        self.assertNotIn("342432569881", sanitized_q)
+        self.assertIn("s***h@gmail.com", sanitized_q)
+        self.assertIn("XXXX-XXXX-9881", sanitized_q)
+        self.assertIn("3pm", sanitized_q)
+        self.assertIn("31st nov", sanitized_q)
+
+    # -----------------------------------------------------------------
+    # Acceptance Test 24: Context-Aware PAN NLP Detection
+    # -----------------------------------------------------------------
+    def test_24_context_aware_pan_nlp_detection(self):
+        """Recognizes PAN card in context."""
+        text = "Please verify my PAN card ABCPE1234F before approval."
+        entities = ContextAwareNLPEngine.find_semantic_entities(text)
+        pan_entities = [e for e in entities if e.pii_type == PIIType.PAN_CARD]
+        self.assertEqual(len(pan_entities), 1)
+        self.assertEqual(pan_entities[0].value, "ABCPE1234F")
+
 
 if __name__ == "__main__":
     unittest.main()

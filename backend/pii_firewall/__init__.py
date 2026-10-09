@@ -24,6 +24,7 @@ from pii_firewall.models import (
     PIILeakageDetectedError,
     FirewallBlockedError,
 )
+from pii_firewall.gemini_analyzer import GeminiPIIAnalyzer, GeminiPIIRecognizer
 from pii_firewall.semantic_nlp import ContextAwareNLPEngine
 from pii_firewall.simulated_tool import SimulatedExternalTool
 from pii_firewall.agent_adapter import AgentToolAdapter
@@ -39,6 +40,8 @@ __all__ = [
     "CustomRegexRecognizer",
     "CustomFunctionRecognizer",
     "create_custom_recognizer",
+    "GeminiPIIAnalyzer",
+    "GeminiPIIRecognizer",
     "PIIType",
     "PIIEntity",
     "SensitivityCategory",

@@ -263,10 +263,35 @@ with ctrl_col2:
     st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
     send_sim_clicked = st.button("🚀 Send", type="primary", use_container_width=True)
 
+with st.expander("🤖 AI Integration (Google Gemini Free API - Optional)", expanded=False):
+    gemini_key_input = st.text_input(
+        "Gemini API Key (Google AI Studio Free Tier):",
+        value=os.environ.get("GEMINI_API_KEY", ""),
+        type="password",
+        placeholder="AIzaSy... (leave blank to use local NLP engine)",
+        help="Get a 100% free API key from https://aistudio.google.com/app/apikey"
+    )
+    col_g1, col_g2 = st.columns([1, 1])
+    with col_g1:
+        gemini_model_choice = st.selectbox(
+            "Gemini Model:",
+            options=["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
+            index=0,
+            help="gemini-1.5-flash has the highest free tier rate limits (15 RPM, 1M TPM)"
+        )
+    with col_g2:
+        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+        if gemini_key_input.strip():
+            st.success("🟢 Gemini AI Active (Cloud LLM Mode)")
+        else:
+            st.info("🔵 Local Context-Aware NLP Active")
+
 if send_sim_clicked:
     st.session_state["sim_has_executed"] = True
     st.session_state["executed_prompt"] = user_prompt
     st.session_state["executed_action"] = chosen_sim_action
+    st.session_state["executed_gemini_key"] = gemini_key_input.strip()
+    st.session_state["executed_gemini_model"] = gemini_model_choice
 
 
 # =====================================================================
@@ -275,6 +300,8 @@ if send_sim_clicked:
 if st.session_state.get("sim_has_executed", False):
     active_prompt = st.session_state.get("executed_prompt", user_prompt)
     active_action = st.session_state.get("executed_action", chosen_sim_action)
+    active_gemini_key = st.session_state.get("executed_gemini_key", gemini_key_input.strip())
+    active_gemini_model = st.session_state.get("executed_gemini_model", gemini_model_choice)
 
     # Build payload
     sim_tool_payload = extract_tool_call_from_prompt(active_prompt)
@@ -290,12 +317,14 @@ if st.session_state.get("sim_has_executed", False):
             )
         )
 
-    # Configure Firewall with Context-Aware NLP
+    # Configure Firewall with Context-Aware NLP & Optional Gemini AI
     sim_config = FirewallConfig(
         enabled_types={PIIType(t) for t in selected_types},
         allow_restoration=True,
         fail_safe_strict=True,
         enable_semantic_nlp=True,
+        gemini_api_key=active_gemini_key if active_gemini_key else None,
+        gemini_model=active_gemini_model,
     )
     sim_firewall = PIIFirewall(
         config=sim_config,
@@ -431,11 +460,25 @@ if st.session_state.get("sim_has_executed", False):
         </div>
         """, unsafe_allow_html=True)
 
+    if active_gemini_key:
+        ai_scanner_badge = (
+            f'<div style="margin-bottom: 8px; padding: 6px 10px; background: rgba(16, 185, 129, 0.12); border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.35); font-size: 0.85rem;">'
+            f'🤖 <b>AI PII Scanner Active:</b> Powered by Google Gemini (<code>{active_gemini_model}</code>) Free API &bull; Semantic prompt analysis & PII extraction enabled.'
+            f'</div>'
+        )
+    else:
+        ai_scanner_badge = (
+            '<div style="margin-bottom: 8px; padding: 6px 10px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border: 1px solid rgba(59, 130, 246, 0.25); font-size: 0.85rem;">'
+            '🛡️ <b>Local Hybrid Engine Active:</b> High-speed Context-Aware NLP, NER & Checksum Validators running locally (100% private, zero latency).'
+            '</div>'
+        )
+
     # 2️⃣ STEP 2: Whole-Prompt PII Detection & Safety Inspection
     with st.container():
         st.markdown(f"""
         <div class="step-card" style="border-left: 4px solid #10B981;">
           <div class="step-title">2️⃣ STEP 2: Whole-Prompt PII Detection & Safety Inspection</div>
+          {ai_scanner_badge}
           <div><b>Recursive Scanner:</b> Scans the whole prompt across email, phone, SSN, credit cards, Aadhaar, PAN, and cloud secret recognizers.</div>
           {targets_display}
           <div style="margin-top: 4px;"><b>False-Positive Prevention:</b> The terms &ldquo;3pm&rdquo; and &ldquo;31st nov&rdquo; are analyzed by the phone and date evaluators and verified as non-PII operational scheduling parameters (not misidentified as phone numbers or identifiers!).</div>

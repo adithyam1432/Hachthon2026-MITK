@@ -137,6 +137,8 @@ class FirewallConfig:
     enable_luhn_validation: bool = True  # For credit cards
     enable_verhoeff_validation: bool = True  # For Aadhaar cards
     enable_semantic_nlp: bool = True  # Context-aware NLP & semantic detection
+    gemini_api_key: Optional[str] = None  # Google Gemini Free Tier API Key
+    gemini_model: str = "gemini-1.5-flash"  # Gemini Model (e.g. gemini-1.5-flash)
 
 
 @dataclass

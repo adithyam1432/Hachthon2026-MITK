@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pii-firewall"
+version = "1.0.0"
+description = "Ultra-low-latency PII Firewall and Privacy Middleware for AI Agents"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "MITK AI Vision Hackathon Team" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "streamlit>=1.30.0",
+    "Flask>=3.0.0",
+    "flask-cors>=4.0.0",
+    "regex>=2023.0.0",
+]
+
+[project.scripts]
+pii-firewall = "pii_firewall.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+include = ["pii_firewall*"]

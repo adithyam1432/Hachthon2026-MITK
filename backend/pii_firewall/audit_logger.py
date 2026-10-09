@@ -70,5 +70,9 @@ class AuditLogger:
     def get_recent_logs(self, limit: int = 50) -> List[Dict[str, Any]]:
         return self.memory_logs[-limit:]
 
+    def get_memory_logs(self) -> List[Dict[str, Any]]:
+        """Returns all in-memory audit log entries."""
+        return list(self.memory_logs)
+
     def clear(self) -> None:
         self.memory_logs.clear()

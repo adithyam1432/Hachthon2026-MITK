@@ -699,7 +699,12 @@ if st.session_state.get("sim_has_executed", False):
                 )
 
     with audit_col:
-        ledger_entries = st.session_state.audit_logger.get_memory_logs()
+        if hasattr(st.session_state.audit_logger, "get_memory_logs"):
+            ledger_entries = st.session_state.audit_logger.get_memory_logs()
+        elif hasattr(st.session_state.audit_logger, "memory_logs"):
+            ledger_entries = list(st.session_state.audit_logger.memory_logs)
+        else:
+            ledger_entries = []
         audit_json_str = json.dumps(ledger_entries, indent=2)
         st.download_button(
             label="📥 Download Zero-PII Audit Ledger (JSON)",

@@ -46,8 +46,8 @@ venv.bak/
 .DS_Store
 Thumbs.db
 
-# Streamlit
-.streamlit/
+# Streamlit secrets (keep config.toml tracked for cloud deployment)
+.streamlit/secrets.toml
 
 # Internal Specs
 docs/PRD_MULTI_AGENT_SPECIFICATION.md

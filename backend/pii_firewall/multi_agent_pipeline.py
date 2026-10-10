@@ -385,6 +385,42 @@ class ClassificationAgent:
                 "CREDENTIAL",
                 "Card/ATM authentication PIN; strictly blocked across external boundaries.",
             ),
+            PIIType.CVV: (
+                "CREDENTIAL",
+                "Card security verification code; strictly blocked across external boundaries.",
+            ),
+            PIIType.OTP: (
+                "CREDENTIAL",
+                "One-time verification code; strictly blocked across external boundaries.",
+            ),
+            PIIType.ACCESS_TOKEN: (
+                "CREDENTIAL",
+                "Bearer/OAuth authorization token; strictly blocked across external boundaries.",
+            ),
+            PIIType.BANK_ACCOUNT: (
+                "FINANCIAL_RECORD",
+                "Direct banking account identifier; tokenized in reversible vault for authorized settlement.",
+            ),
+            PIIType.VOTER_ID: (
+                "GOVERNMENT_ID",
+                "National voter identity registration; protected under data protection rules.",
+            ),
+            PIIType.EMPLOYEE_ID: (
+                "ORGANIZATIONAL_ID",
+                "Internal enterprise staff identifier; policy-based protection.",
+            ),
+            PIIType.CUSTOMER_ID: (
+                "ORGANIZATIONAL_ID",
+                "Enterprise customer reference identifier; policy-based protection.",
+            ),
+            PIIType.MEDICAL_DIAGNOSIS: (
+                "HEALTH_INFORMATION",
+                "Protected Health Information (PHI) under HIPAA/GDPR health privacy standards.",
+            ),
+            PIIType.SALARY_INFO: (
+                "FINANCIAL_RECORD",
+                "Employee compensation and remuneration data; policy-based protection.",
+            ),
         }
         if p_type in mapping:
             return mapping[p_type]

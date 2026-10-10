@@ -310,10 +310,11 @@ if send_sim_clicked:
 if st.session_state.get("sim_has_executed", False):
     active_prompt = st.session_state.get("executed_prompt", user_prompt)
 
-    # Execute end-to-end Multi-Agent Pipeline (sub-3ms local execution)
+    # Execute end-to-end Multi-Agent Pipeline (deterministic local + optional Gemini AI)
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     pipeline = MultiAgentPipeline(
-        gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
-        enable_cloud_gemini=False,  # High-speed local engine guarantees instant ~2ms execution
+        gemini_api_key=gemini_key,
+        enable_cloud_gemini=bool(gemini_key),
     )
     trace = pipeline.run(active_prompt)
 

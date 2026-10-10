@@ -133,6 +133,9 @@ class PIIFirewall:
             return result, vault
 
         except PIILeakageDetectedError as e:
+            with self._lock:
+                self._active_vaults.pop(req_id, None)
+            vault.clear()
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             metrics.processing_time_ms = duration_ms
             metrics.verification_passed = False
@@ -150,6 +153,9 @@ class PIIFirewall:
             raise e
 
         except FirewallBlockedError as e:
+            with self._lock:
+                self._active_vaults.pop(req_id, None)
+            vault.clear()
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             metrics.processing_time_ms = duration_ms
             metrics.verification_passed = False
@@ -167,6 +173,10 @@ class PIIFirewall:
             raise e
 
         except Exception as e:
+            if self.config.fail_safe_strict:
+                with self._lock:
+                    self._active_vaults.pop(req_id, None)
+                vault.clear()
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             metrics.processing_time_ms = duration_ms
             metrics.verification_passed = False
@@ -250,8 +260,12 @@ class PIIFirewall:
         """
         fw_result, vault = self.intercept_request(request_payload, request_id=request_id)
 
-        # Execute tool with sanitized payload
-        tool_raw_response = tool_callable(fw_result.sanitized_payload)
+        try:
+            # Execute tool with sanitized payload
+            tool_raw_response = tool_callable(fw_result.sanitized_payload)
+        except Exception:
+            self.purge_vault(fw_result.request_id)
+            raise
 
         # Restore response
         restored_response, resp_metrics = self.intercept_response(
@@ -272,6 +286,25 @@ class PIIFirewall:
                 "total_overhead_ms": round(fw_result.metrics.processing_time_ms + resp_metrics.restoration_time_ms, 3),
             },
         }
+
+    def purge_vault(self, request_id: str) -> None:
+        """Purges and clears ephemeral vault memory for a specific request ID."""
+        with self._lock:
+            vault = self._active_vaults.pop(request_id, None)
+        if vault:
+            vault.clear()
+
+    def get_active_vault_count(self) -> int:
+        """Returns the number of currently active in-memory vaults."""
+        with self._lock:
+            return len(self._active_vaults)
+
+    def clear_all_vaults(self) -> None:
+        """Clears and purges all active vaults."""
+        with self._lock:
+            for v in list(self._active_vaults.values()):
+                v.clear()
+            self._active_vaults.clear()
 
     def register_custom_recognizer(
         self,

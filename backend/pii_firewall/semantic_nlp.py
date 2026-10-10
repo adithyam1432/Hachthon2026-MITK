@@ -568,7 +568,7 @@ class ContextAwareNLPEngine:
 
         # Driver's License in context
         dl_cand_pattern = re.compile(
-            r"(?i:(?:driver\'?s?\s*licen[sc]e(?:\s*(?:no\.?|num(?:ber)?))?|driving\s*licen[sc]e(?:\s*(?:no\.?|num(?:ber)?))?|dl\s*num(?:ber)?|dl\s*no\.?|dl)\s*(?:is|was|:|=|->|#|\s)*\s*)"
+            r"(?i:\b(?:driver\'?s?\s*licen[sc]e(?:\s*(?:no\.?|num(?:ber)?))?|driving\s*licen[sc]e(?:\s*(?:no\.?|num(?:ber)?))?|dl\s*num(?:ber)?|dl\s*no\.?|dl)\b\s*(?:is|was|:|=|->|#|\s)*\s*)"
             r"([A-Za-z0-9][A-Za-z0-9\s-]{4,18}[A-Za-z0-9])",
             re.IGNORECASE
         )

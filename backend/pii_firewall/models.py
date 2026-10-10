@@ -175,7 +175,6 @@ class FirewallConfig:
     enable_luhn_validation: bool = True  # For credit cards
     enable_verhoeff_validation: bool = True  # For Aadhaar cards
     enable_semantic_nlp: bool = True  # Context-aware NLP & semantic detection
-    enable_cloud_ai: bool = False  # Pure local high-speed engine (<2ms SLA) by default; True for cloud AI
     gemini_api_key: Optional[str] = None  # Google Gemini Free Tier API Key
     gemini_model: str = "gemini-3.5-flash-lite"  # Gemini Model (e.g. gemini-3.5-flash-lite)
 
@@ -211,4 +210,3 @@ class FirewallResult:
     metrics: FirewallMetrics
     blocked: bool = False
     block_reason: Optional[str] = None
-    detected_entities: List[PIIEntity] = field(default_factory=list)

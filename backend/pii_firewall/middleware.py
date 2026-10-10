@@ -51,7 +51,6 @@ class PIIFirewall:
             enable_semantic_nlp=self.config.enable_semantic_nlp,
             gemini_api_key=getattr(self.config, "gemini_api_key", None),
             gemini_model=getattr(self.config, "gemini_model", "gemini-3.5-flash-lite"),
-            enable_cloud_ai=getattr(self.config, "enable_cloud_ai", False),
         )
         self.scanner = JSONPIIScanner(self.recognizers)
         self.verifier = LeakageVerifier()
@@ -128,14 +127,13 @@ class PIIFirewall:
                 sanitized_payload=sanitized_payload,
                 metrics=metrics,
                 blocked=False,
-                detected_entities=list(getattr(self.scanner, "last_detected_entities", [])),
             )
             return result, vault
 
         except PIILeakageDetectedError as e:
+            vault.clear()
             with self._lock:
                 self._active_vaults.pop(req_id, None)
-            vault.clear()
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             metrics.processing_time_ms = duration_ms
             metrics.verification_passed = False
@@ -153,9 +151,9 @@ class PIIFirewall:
             raise e
 
         except FirewallBlockedError as e:
+            vault.clear()
             with self._lock:
                 self._active_vaults.pop(req_id, None)
-            vault.clear()
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             metrics.processing_time_ms = duration_ms
             metrics.verification_passed = False
@@ -173,10 +171,9 @@ class PIIFirewall:
             raise e
 
         except Exception as e:
-            if self.config.fail_safe_strict:
-                with self._lock:
-                    self._active_vaults.pop(req_id, None)
-                vault.clear()
+            vault.clear()
+            with self._lock:
+                self._active_vaults.pop(req_id, None)
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             metrics.processing_time_ms = duration_ms
             metrics.verification_passed = False
@@ -260,12 +257,8 @@ class PIIFirewall:
         """
         fw_result, vault = self.intercept_request(request_payload, request_id=request_id)
 
-        try:
-            # Execute tool with sanitized payload
-            tool_raw_response = tool_callable(fw_result.sanitized_payload)
-        except Exception:
-            self.purge_vault(fw_result.request_id)
-            raise
+        # Execute tool with sanitized payload
+        tool_raw_response = tool_callable(fw_result.sanitized_payload)
 
         # Restore response
         restored_response, resp_metrics = self.intercept_response(
@@ -287,24 +280,10 @@ class PIIFirewall:
             },
         }
 
-    def purge_vault(self, request_id: str) -> None:
-        """Purges and clears ephemeral vault memory for a specific request ID."""
-        with self._lock:
-            vault = self._active_vaults.pop(request_id, None)
-        if vault:
-            vault.clear()
-
     def get_active_vault_count(self) -> int:
-        """Returns the number of currently active in-memory vaults."""
+        """Returns the number of active in-memory vaults."""
         with self._lock:
             return len(self._active_vaults)
-
-    def clear_all_vaults(self) -> None:
-        """Clears and purges all active vaults."""
-        with self._lock:
-            for v in list(self._active_vaults.values()):
-                v.clear()
-            self._active_vaults.clear()
 
     def register_custom_recognizer(
         self,

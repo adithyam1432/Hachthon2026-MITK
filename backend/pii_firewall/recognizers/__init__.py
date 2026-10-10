@@ -29,7 +29,6 @@ def get_default_recognizers(
     enable_semantic_nlp: bool = True,
     gemini_api_key: Optional[str] = None,
     gemini_model: str = "gemini-3.5-flash-lite",
-    enable_cloud_ai: bool = False,
 ) -> List[BasePIIRecognizer]:
     """Factory creating recognizers based on enabled configuration."""
     recognizers: List[BasePIIRecognizer] = []
@@ -51,9 +50,9 @@ def get_default_recognizers(
         recognizers.append(AadhaarRecognizer(check_verhoeff=check_verhoeff))
     if enable_semantic_nlp:
         recognizers.append(SemanticNLPRecognizer())
-    active_gemini_key = gemini_api_key if gemini_api_key else (
+    active_gemini_key = gemini_api_key or (
         os.environ.get("GEMINI_API_KEY", "").strip()
-        if (enable_cloud_ai and not os.environ.get("GEMINI_UNIT_TEST_MODE"))
+        if not os.environ.get("GEMINI_UNIT_TEST_MODE")
         else ""
     )
     if active_gemini_key:

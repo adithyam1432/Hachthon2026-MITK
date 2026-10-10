@@ -42,11 +42,11 @@ venv.bak/
 *.swp
 *.swo
 *~
-~$*
 .DS_Store
 Thumbs.db
 
-# Streamlit secrets (keep config.toml tracked for cloud deployment)
+# Streamlit
+.streamlit/
 .streamlit/secrets.toml
 
 # Internal Specs

@@ -22,22 +22,19 @@ from pii_firewall.models import PIIEntity, PIIType, SensitivityCategory, TYPE_TO
 SYNONYM_MAPPINGS: Dict[PIIType, List[str]] = {
     # Credentials & Authentication Secrets
     PIIType.PIN: [
-        "pin", "my pin", "pin is", "pin:", "pin number", "enter pin",
         "debit card pin", "debit card password", "atm pin", "atm card pin",
         "bank card pin", "cash withdrawal pin", "card security pin", "banking pin",
         "four-digit card pin", "my card's secret number", "the pin used at an atm",
         "pin for withdrawing cash", "the number i enter at the atm",
         "the secret code for my debit card", "upi pin", "atm passcode",
-        "debit pin", "secret atm pin", "card pin", "atm secret code",
-        "secret pin", "my card pin", "enter at the atm", "pin code",
-        "security pin", "account pin", "user pin"
+        "debit pin", "secret atm pin", "card pin", "atm secret code", "pin number",
+        "secret pin", "my card pin", "enter at the atm"
     ],
     PIIType.PASSWORD: [
         "passcode", "login secret", "account password", "sign-in code", "signin code",
         "master password", "admin password", "user password", "login password",
         "secret password", "password is", "passphrase", "login credential",
-        "portal password", "system password", "auth password", "credential password",
-        "pwd", "pass", "my password"
+        "portal password", "system password", "auth password", "credential password"
     ],
     PIIType.CVV: [
         "card security code", "card verification value", "security digits",
@@ -95,8 +92,7 @@ SYNONYM_MAPPINGS: Dict[PIIType, List[str]] = {
     PIIType.HOME_ADDRESS: [
         "residential address", "home location", "permanent address",
         "living address", "home address", "house address", "delivery address",
-        "residence address", "mailing address", "address", "my address",
-        "address is", "lives at", "residing at", "street address"
+        "residence address", "mailing address"
     ],
     PIIType.MEDICAL_DIAGNOSIS: [
         "medical diagnosis", "health condition", "diagnosed illness",
@@ -117,17 +113,7 @@ SYNONYM_MAPPINGS: Dict[PIIType, List[str]] = {
     PIIType.BANK_ACCOUNT: [
         "bank account number", "account number", "banking account id",
         "account details", "checking account", "savings account", "iban",
-        "routing number", "ach account", "bank account", "account no",
-        "ac no", "a/c no", "bank account no", "ifsc"
-    ],
-    PIIType.VOTER_ID: [
-        "voter id", "voter card", "epic", "epic number", "voter registration"
-    ],
-    PIIType.EMPLOYEE_ID: [
-        "employee id", "emp id", "staff id", "worker id", "badge number"
-    ],
-    PIIType.CUSTOMER_ID: [
-        "customer id", "cust id", "client id", "account id", "customer number"
+        "routing number", "ach account", "bank account"
     ],
     PIIType.AADHAAR: [
         "aadhaar", "aadhaar number", "aadhaar no", "aadhaar num", "aadhaar card", "aadhaar id",
@@ -212,20 +198,7 @@ class ContextAwareNLPEngine:
         "general", "motors", "production", "environment", "new", "york", "united", "states",
         "next", "quarter", "project", "schedule", "meeting", "system", "service", "cloud",
         "customer", "service", "terms", "conditions", "privacy", "policy", "internal", "external",
-        "spring", "summer", "autumn", "winter", "north", "south", "east", "west",
-        "me", "him", "her", "them", "us", "you", "the", "a", "an", "someone", "anyone", "everyone",
-        "all", "assistant", "server", "support", "team", "helpdesk", "admin", "client",
-        "query", "prompt", "today", "tomorrow", "leave", "personal", "issue", "office",
-        "home", "work", "test", "demo", "file", "data", "details", "info", "information",
-        "request", "response", "status", "active", "inactive", "verified", "pending",
-        "urgent", "immediate", "subject", "message", "email", "mail", "note",
-        "profile", "record", "account", "password", "code", "tool", "device", "address",
-        "phone", "number", "pin", "credential", "user", "applicant", "member"
-    }
-
-    NAME_TERMINATORS = {
-        "at", "from", "with", "in", "on", "for", "his", "her", "their",
-        "is", "was", "has", "and", "who", "whose", "by", "to", "having"
+        "spring", "summer", "autumn", "winter", "north", "south", "east", "west"
     }
 
     @staticmethod
@@ -305,47 +278,13 @@ class ContextAwareNLPEngine:
             )
 
         # -------------------------------------------------------------
-        # B. Check for PINs (ATM PIN, Debit Card PIN, UPI PIN)
+        # B. Check for PINs (ATM PIN, Debit Card PIN) using Context Window
         # -------------------------------------------------------------
-        # B1. Direct PIN Assignment (e.g. "pin: 4821", "and pin 4821", "pin is 1234", "my pin 5678", "atm pin 4821")
-        pin_explicit_pattern = re.compile(
-            r"(?i:\b(?:(?:atm|upi|debit|bank|card|security|secret|account|user|my)?\s*pin(?:\s*code|\s*number|\s*no\.?)?)\s*(?:is|was|:|=|->|#|\s)\s*)"
-            r"(\d{4,6})\b"
-        )
-        for match in pin_explicit_pattern.finditer(text):
-            cand_val = match.group(1)
-            start_pos, end_pos = match.start(1), match.end(1)
-            # False-positive filter for operational words
-            if not any(f"{stop} {cand_val}" in text.lower() for stop in ["port", "year", "flight", "order", "model", "room", "suite"]):
-                if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                    related_entity = None
-                    for subject, pred, val in cls.extract_entity_relationships(text):
-                        if val == cand_val or any(s in pred for s in ["pin", "atm", "card"]):
-                            related_entity = subject
-                            break
-
-                    entities.append(
-                        PIIEntity(
-                            pii_type=PIIType.PIN,
-                            start=start_pos,
-                            end=end_pos,
-                            value=cand_val,
-                            confidence=0.98,
-                            category=SensitivityCategory.CREDENTIAL,
-                            context_evidence="Direct PIN assignment context",
-                            related_entity=related_entity,
-                            has_exposed_value=True
-                        )
-                    )
-
-        # B2. Candidate value: 4 to 6 digit numbers via context window
+        # Candidate value: 4 to 6 digit numbers
         pin_cand_pattern = re.compile(r"\b(\d{4,6})\b")
         for match in pin_cand_pattern.finditer(text):
             cand_val = match.group(1)
             start_pos, end_pos = match.start(1), match.end(1)
-
-            if any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                continue
 
             # Extract context window
             ctx_start = max(0, start_pos - cls.CONTEXT_WINDOW_CHARS)
@@ -354,6 +293,7 @@ class ContextAwareNLPEngine:
 
             # False-positive filter: check operational scheduling / ports / dates
             if any(stopword in context_window for stopword in cls.OPERATIONAL_STOPWORDS):
+                # Verify if this specific number is part of a non-PII token
                 if "port " + cand_val in context_window or "year " + cand_val in context_window:
                     continue
 
@@ -365,6 +305,7 @@ class ContextAwareNLPEngine:
                     break
 
             if matched_synonym:
+                # Relationship extraction (e.g. Adithya's PIN)
                 related_entity = None
                 for subject, pred, val in cls.extract_entity_relationships(text):
                     if val == cand_val or any(s in pred for s in ["pin", "atm", "card"]):
@@ -390,58 +331,38 @@ class ContextAwareNLPEngine:
         # -------------------------------------------------------------
         # Pattern: [password synonym] [is / : / = / -] [value]
         pwd_pattern = re.compile(
-            r"(?i:\b(?:password|passcode|login\s+secret|account\s+password|sign-in\s+code|auth\s+password|pwd|pass)\s*(?:is|was|:|=|->|\s+)\s*)"
-            r"([^\s,.;]+)"
+            r"(?:password|passcode|login secret|account password|sign-in code|auth password)"
+            r"\s*(?:is|was|:|=|->|\s+)\s*([^\s,.;]+)",
+            re.IGNORECASE
         )
         for match in pwd_pattern.finditer(text):
             val = match.group(1).strip()
             # Must not be an educational discussion word like "secret", "private", "important"
             if len(val) >= 4 and val.lower() not in {"never", "not", "should", "always", "shared", "kept"}:
-                if not any(e.start <= match.start(1) and e.end >= match.end(1) for e in entities):
-                    entities.append(
-                        PIIEntity(
-                            pii_type=PIIType.PASSWORD,
-                            start=match.start(1),
-                            end=match.end(1),
-                            value=val,
-                            confidence=0.96,
-                            category=SensitivityCategory.CREDENTIAL,
-                            context_evidence="Direct password assignment context",
-                            has_exposed_value=True
-                        )
-                    )
-
-        # -------------------------------------------------------------
-        # D. Check for CVV / Card Security Codes
-        # -------------------------------------------------------------
-        cvv_direct_pattern = re.compile(
-            r"(?i:\b(?:cvv|cvc|cvv2|cid|security\s*code|card\s*security\s*digits)\s*(?:is|was|:|=|->|#|\s)\s*)"
-            r"(\d{3,4})\b"
-        )
-        for match in cvv_direct_pattern.finditer(text):
-            cand_val = match.group(1)
-            start_pos, end_pos = match.start(1), match.end(1)
-            if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
                 entities.append(
                     PIIEntity(
-                        pii_type=PIIType.CVV,
-                        start=start_pos,
-                        end=end_pos,
-                        value=cand_val,
-                        confidence=0.98,
+                        pii_type=PIIType.PASSWORD,
+                        start=match.start(1),
+                        end=match.end(1),
+                        value=val,
+                        confidence=0.96,
                         category=SensitivityCategory.CREDENTIAL,
-                        context_evidence="Direct CVV assignment context",
+                        context_evidence="Direct password assignment context",
                         has_exposed_value=True
                     )
                 )
 
+        # -------------------------------------------------------------
+        # D. Check for CVV / Card Security Codes
+        # -------------------------------------------------------------
         # Candidate value: 3 or 4 digits
         cvv_cand_pattern = re.compile(r"\b(\d{3,4})\b")
         for match in cvv_cand_pattern.finditer(text):
             cand_val = match.group(1)
             start_pos, end_pos = match.start(1), match.end(1)
 
-            if any(e.start <= start_pos and e.end >= end_pos for e in entities):
+            # Avoid re-detecting what's already a PIN
+            if any(e.start == start_pos and e.end == end_pos for e in entities):
                 continue
 
             ctx_start = max(0, start_pos - cls.CONTEXT_WINDOW_CHARS)
@@ -471,33 +392,12 @@ class ContextAwareNLPEngine:
         # -------------------------------------------------------------
         # E. Check for OTP / Verification Codes
         # -------------------------------------------------------------
-        otp_direct_pattern = re.compile(
-            r"(?i:\b(?:otp|one[- ]time\s*(?:password|pin|code)|verification\s*code|login\s*code|2fa\s*code|sms\s*code)\s*(?:is|was|:|=|->|#|\s)\s*)"
-            r"(\d{4,8})\b"
-        )
-        for match in otp_direct_pattern.finditer(text):
-            cand_val = match.group(1)
-            start_pos, end_pos = match.start(1), match.end(1)
-            if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                entities.append(
-                    PIIEntity(
-                        pii_type=PIIType.OTP,
-                        start=start_pos,
-                        end=end_pos,
-                        value=cand_val,
-                        confidence=0.98,
-                        category=SensitivityCategory.CREDENTIAL,
-                        context_evidence="Direct OTP/verification code assignment",
-                        has_exposed_value=True
-                    )
-                )
-
         otp_cand_pattern = re.compile(r"\b(\d{4,8})\b")
         for match in otp_cand_pattern.finditer(text):
             cand_val = match.group(1)
             start_pos, end_pos = match.start(1), match.end(1)
 
-            if any(e.start <= start_pos and e.end >= end_pos for e in entities):
+            if any(e.start == start_pos and e.end == end_pos for e in entities):
                 continue
 
             ctx_start = max(0, start_pos - cls.CONTEXT_WINDOW_CHARS)
@@ -669,7 +569,7 @@ class ContextAwareNLPEngine:
         # Driver's License in context
         dl_cand_pattern = re.compile(
             r"(?i:\b(?:driver\'?s?\s*licen[sc]e(?:\s*(?:no\.?|num(?:ber)?))?|driving\s*licen[sc]e(?:\s*(?:no\.?|num(?:ber)?))?|dl\s*num(?:ber)?|dl\s*no\.?|dl)\b\s*(?:is|was|:|=|->|#|\s)*\s*)"
-            r"([A-Za-z0-9][A-Za-z0-9-]{4,18}[A-Za-z0-9])\b",
+            r"([A-Za-z0-9][A-Za-z0-9\s-]{4,18}[A-Za-z0-9])",
             re.IGNORECASE
         )
         for m in dl_cand_pattern.finditer(text):
@@ -690,40 +590,15 @@ class ContextAwareNLPEngine:
                         )
                     )
 
-        # Person Name in context (Single names, full names, possessives, and contextual cues)
+        # Person Name in context (2 to 4 capitalized tokens following customer/profile/name contextual cues)
         name_cand_pattern = re.compile(
-            r"(?i:\b(?:"
-            r"(?:my\s+name\s+(?:is|was|:|=)|i\s+am|i\'?m)\s+|"
-            r"(?:(?:full|first|last)\s+)?name\s*(?:is|was|:|=|->|\s)\s*|"
-            r"(?:customer|user|client|employee|patient|individual|applicant|profile|member|account(?:\s+holder)?)\s*(?:onboarding\s+)?(?::|=|->|\s+(?:name\s*(?:is|was|:|=|->)?|profile\s+for|record\s+for|for\s+))\s*|"
-            r"(?:user|customer|client|employee|patient|applicant|member|contact(?:\s+person)?|recipient|account\s+holder)\s*(?::|=|->)\s*|"
-            r"(?:send\s+(?:an?\s+)?(?:email|mail|message|note|letter|invitation)\s+to|mail\s+to|email\s+to|message\s+to)\s+|"
-            r"(?:profile\s+for|record\s+for|details\s+for|account\s+for|onboarding\s+(?:profile\s+)?for)\s+|"
-            r"(?:welcome\s+)?(?:note|letter|message|email|invitation)\s+to\s+|"
-            r"\b(?:user|employee|contact)\s+(?=[A-Z])|"
-            r"\b(?:Mr|Mrs|Ms|Miss|Dr|Prof)\b\.?\s+"
-            r")\s*)"
-            r"([A-Z][a-zA-Z\'\.\-]+(?:\s+[A-Z][a-zA-Z\'\.\-]*){0,3})"
+            r"(?i:(?:(?:customer|user|client|employee|patient|individual|applicant|profile|member|account(?:\s+holder)?)\s*(?:onboarding\s+)?(?::|=|->|\s+(?:name\s*(?:is|was|:|=|->)?|profile\s+for|record\s+for|for\s+))|(?:full\s+)?name\s*(?:is|was|:|=|->)?|named\s+|profile\s+for\s+|record\s+for\s+|onboarding\s+(?:profile\s+)?for\s+|(?:welcome\s+)?(?:note|letter|message|email|invitation)\s+to\s+|(?:Mr|Mrs|Ms|Miss|Dr|Prof)\.?\s*)\s*)"
+            r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})"
         )
         for m in name_cand_pattern.finditer(text):
-            raw_val = m.group(1).strip()
-            tokens = raw_val.split()
-            clean_tokens = []
-            for tok in tokens:
-                if tok.lower() in cls.NAME_TERMINATORS:
-                    break
-                clean_tokens.append(tok)
-            if not clean_tokens:
-                continue
-            cand_val = " ".join(clean_tokens)
-            start_pos = m.start(1)
-            end_pos = start_pos + len(cand_val)
-
-            # Skip if followed by @ or contains @ (part of email)
-            if (end_pos < len(text) and text[end_pos] == "@") or "@" in cand_val:
-                continue
-
-            words = [w.lower().rstrip(".") for w in clean_tokens]
+            cand_val = m.group(1).strip()
+            start_pos, end_pos = m.start(1), m.end(1)
+            words = cand_val.lower().split()
             if not any(w in cls.NAME_STOPWORDS for w in words):
                 if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
                     entities.append(
@@ -734,55 +609,7 @@ class ContextAwareNLPEngine:
                             value=cand_val,
                             confidence=0.95,
                             category=SensitivityCategory.PERSONAL_INFO,
-                            context_evidence="Person name identified via contextual role/name indicators",
-                            has_exposed_value=True
-                        )
-                    )
-
-        # Lowercase name with explicit cue (e.g. "name: sharath", "my name is adithya")
-        explicit_lc_name_pattern = re.compile(
-            r"(?i:\b(?:(?:my\s+)?name\s*(?:is|was|:|=)|i\s+am|i\'?m)\s+)([a-z][a-z\'\-]+(?:\s+[a-z][a-z\'\-]+)?)\b"
-        )
-        for m in explicit_lc_name_pattern.finditer(text):
-            cand_val = m.group(1).strip()
-            start_pos, end_pos = m.start(1), m.end(1)
-            if (end_pos < len(text) and text[end_pos] == "@") or "@" in cand_val:
-                continue
-            words = [w.lower().rstrip(".") for w in cand_val.split()]
-            if not any(w in cls.NAME_STOPWORDS for w in words):
-                if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                    entities.append(
-                        PIIEntity(
-                            pii_type=PIIType.PERSON_NAME,
-                            start=start_pos,
-                            end=end_pos,
-                            value=cand_val,
-                            confidence=0.94,
-                            category=SensitivityCategory.PERSONAL_INFO,
-                            context_evidence="Lowercase person name identified via explicit cue",
-                            has_exposed_value=True
-                        )
-                    )
-
-        # Possessive names: e.g. "Sharath's phone number", "Adithya's account"
-        possessive_name_pattern = re.compile(
-            r"\b([A-Za-z][a-zA-Z\'\-]+)\'s\s+(?:phone|email|account|profile|record|details|info|ssn|pan|aadhaar|passport|dl|address|status|message)\b",
-            re.IGNORECASE
-        )
-        for m in possessive_name_pattern.finditer(text):
-            cand_val = m.group(1).strip()
-            start_pos, end_pos = m.start(1), m.end(1)
-            if cand_val.lower() not in cls.NAME_STOPWORDS:
-                if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                    entities.append(
-                        PIIEntity(
-                            pii_type=PIIType.PERSON_NAME,
-                            start=start_pos,
-                            end=end_pos,
-                            value=cand_val,
-                            confidence=0.96,
-                            category=SensitivityCategory.PERSONAL_INFO,
-                            context_evidence="Possessive person name identifier",
+                            context_evidence="Full person name identified via contextual role/name indicators",
                             has_exposed_value=True
                         )
                     )
@@ -939,192 +766,5 @@ class ContextAwareNLPEngine:
                     has_exposed_value=True
                 )
             )
-
-        # 3. Context-Backed PAN Card (supports cases where "pan" precedes 5-letter 4-digit 1-letter)
-        pan_context_pattern = re.compile(
-            r"(?i:\b(?:pan(?:\s*card|\s*number|\s*no\.?|\s*id)?)\s*(?:is|was|:|=|->|#|\s)\s*)"
-            r"([A-Za-z]{5}\d{4}[A-Za-z])\b"
-        )
-        for match in pan_context_pattern.finditer(text):
-            cand_val = match.group(1).upper()
-            start_pos, end_pos = match.start(1), match.end(1)
-            if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                entities.append(
-                    PIIEntity(
-                        pii_type=PIIType.PAN_CARD,
-                        start=start_pos,
-                        end=end_pos,
-                        value=cand_val,
-                        confidence=0.99,
-                        category=SensitivityCategory.PERSONAL_INFO,
-                        context_evidence="PAN card identifier verified via semantic context",
-                        has_exposed_value=True
-                    )
-                )
-
-        # -------------------------------------------------------------
-        # I. Physical Home & Street Address (HOME_ADDRESS)
-        # -------------------------------------------------------------
-        STREET_TYPES = "Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way|Nagar|Layout|Sector|Block|Apartment|Apt|Building|Terrace|Ter|Place|Pl|Square|Sq|Circle"
-        address_cue_pattern = re.compile(
-            r"(?i:\b(?:(?:home|residential|delivery|shipping|mailing|residence|house|living|permanent)?\s*address|lives?\s+at|residing\s+at|residence\s+at)\s*(?:is|was|:|=|->|\s)\s*)"
-            rf"([0-9]{{1,6}}\s+[a-zA-Z0-9\s,.-]+?\b(?:{STREET_TYPES})\b[a-zA-Z0-9\s,.-]*)"
-        )
-        for m in address_cue_pattern.finditer(text):
-            cand_val = m.group(1).strip().rstrip(".,;")
-            start_pos, end_pos = m.start(1), m.start(1) + len(cand_val)
-            if not any(stop in cand_val.lower() for stop in ["port ", "flight ", "runway", "order ", "model ", "year "]):
-                if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                    entities.append(
-                        PIIEntity(
-                            pii_type=PIIType.HOME_ADDRESS,
-                            start=start_pos,
-                            end=end_pos,
-                            value=cand_val,
-                            confidence=0.96,
-                            category=SensitivityCategory.PERSONAL_INFO,
-                            context_evidence="Residential street address context",
-                            has_exposed_value=True
-                        )
-                    )
-
-        address_street_pattern = re.compile(
-            rf"\b(\d{{1,6}}\s+[A-Za-z0-9\s.,-]+?\b(?:{STREET_TYPES})\b(?:,\s*[A-Za-z\s]+)*(?:\s+\d{{5,6}})?)\b",
-            re.IGNORECASE
-        )
-        for m in address_street_pattern.finditer(text):
-            cand_val = m.group(1).strip().rstrip(".,;")
-            start_pos, end_pos = m.start(1), m.start(1) + len(cand_val)
-            if not any(stop in cand_val.lower() for stop in ["port ", "flight ", "runway", "order ", "model ", "year "]):
-                if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                    entities.append(
-                        PIIEntity(
-                            pii_type=PIIType.HOME_ADDRESS,
-                            start=start_pos,
-                            end=end_pos,
-                            value=cand_val,
-                            confidence=0.94,
-                            category=SensitivityCategory.PERSONAL_INFO,
-                            context_evidence="Physical street address pattern",
-                            has_exposed_value=True
-                        )
-                    )
-
-        # -------------------------------------------------------------
-        # J. Bank Account & Financial Identifiers (BANK_ACCOUNT, IBAN, IFSC)
-        # -------------------------------------------------------------
-        bank_cue_pattern = re.compile(
-            r"(?i:\b(?:(?:bank|checking|savings|current|deposit)?\s*account(?:\s*number|\s*no\.?|\s*num)?|ac\s*no\.?|a/c\s*(?:no\.?|number)?|iban)\s*(?:is|was|:|=|->|#|\s)\s*)"
-            r"([A-Za-z0-9\-]{8,24})\b"
-        )
-        for m in bank_cue_pattern.finditer(text):
-            cand_val = m.group(1).strip()
-            start_pos, end_pos = m.start(1), m.end(1)
-            if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                entities.append(
-                    PIIEntity(
-                        pii_type=PIIType.BANK_ACCOUNT,
-                        start=start_pos,
-                        end=end_pos,
-                        value=cand_val,
-                        confidence=0.97,
-                        category=SensitivityCategory.PERSONAL_INFO,
-                        context_evidence="Bank account identifier context",
-                        has_exposed_value=True
-                    )
-                )
-
-        iban_pattern = re.compile(r"\b([A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}(?:[A-Z0-9]?){0,16})\b")
-        for m in iban_pattern.finditer(text):
-            cand_val = m.group(1).strip()
-            start_pos, end_pos = m.start(1), m.end(1)
-            if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                entities.append(
-                    PIIEntity(
-                        pii_type=PIIType.BANK_ACCOUNT,
-                        start=start_pos,
-                        end=end_pos,
-                        value=cand_val,
-                        confidence=0.98,
-                        category=SensitivityCategory.PERSONAL_INFO,
-                        context_evidence="Standard IBAN international banking identifier",
-                        has_exposed_value=True
-                    )
-                )
-
-        # -------------------------------------------------------------
-        # K. Extended Identity Records (VOTER_ID, EMPLOYEE_ID, CUSTOMER_ID, ACCESS_TOKEN)
-        # -------------------------------------------------------------
-        voter_pattern = re.compile(r"(?i:\b(?:voter\s*id|epic(?:\s*no\.?|\s*id)?)\s*(?:is|was|:|=|->|#|\s)\s*)([A-Za-z]{3}\d{7})\b")
-        for m in voter_pattern.finditer(text):
-            cand_val = m.group(1).strip().upper()
-            start_pos, end_pos = m.start(1), m.end(1)
-            if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                entities.append(
-                    PIIEntity(
-                        pii_type=PIIType.VOTER_ID,
-                        start=start_pos,
-                        end=end_pos,
-                        value=cand_val,
-                        confidence=0.97,
-                        category=SensitivityCategory.PERSONAL_INFO,
-                        context_evidence="Voter ID / EPIC card context",
-                        has_exposed_value=True
-                    )
-                )
-
-        emp_pattern = re.compile(r"(?i:\b(?:employee\s*id|staff\s*id|emp\s*id)\s*(?:is|was|:|=|->|#|\s)\s*)([A-Za-z0-9\-]{3,15})\b")
-        for m in emp_pattern.finditer(text):
-            cand_val = m.group(1).strip()
-            start_pos, end_pos = m.start(1), m.end(1)
-            if any(c.isdigit() for c in cand_val) and not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                entities.append(
-                    PIIEntity(
-                        pii_type=PIIType.EMPLOYEE_ID,
-                        start=start_pos,
-                        end=end_pos,
-                        value=cand_val,
-                        confidence=0.96,
-                        category=SensitivityCategory.PERSONAL_INFO,
-                        context_evidence="Employee/staff identity badge record",
-                        has_exposed_value=True
-                    )
-                )
-
-        cust_pattern = re.compile(r"(?i:\b(?:customer\s*id|cust\s*id|client\s*id)\s*(?:is|was|:|=|->|#|\s)\s*)([A-Za-z0-9\-]{3,15})\b")
-        for m in cust_pattern.finditer(text):
-            cand_val = m.group(1).strip()
-            start_pos, end_pos = m.start(1), m.end(1)
-            if any(c.isdigit() for c in cand_val) and not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                entities.append(
-                    PIIEntity(
-                        pii_type=PIIType.CUSTOMER_ID,
-                        start=start_pos,
-                        end=end_pos,
-                        value=cand_val,
-                        confidence=0.96,
-                        category=SensitivityCategory.PERSONAL_INFO,
-                        context_evidence="Customer / CRM reference identifier",
-                        has_exposed_value=True
-                    )
-                )
-
-        bearer_pattern = re.compile(r"\bBearer\s+([A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+\.?[A-Za-z0-9\-_=]*)\b")
-        for m in bearer_pattern.finditer(text):
-            cand_val = m.group(1).strip()
-            start_pos, end_pos = m.start(1), m.end(1)
-            if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
-                entities.append(
-                    PIIEntity(
-                        pii_type=PIIType.ACCESS_TOKEN,
-                        start=start_pos,
-                        end=end_pos,
-                        value=cand_val,
-                        confidence=0.99,
-                        category=SensitivityCategory.CREDENTIAL,
-                        context_evidence="Bearer JWT authentication token",
-                        has_exposed_value=True
-                    )
-                )
 
         return entities

@@ -11,6 +11,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
 from pii_firewall.models import PIIType, SensitivityCategory, TYPE_TO_CATEGORY
 
@@ -146,6 +147,79 @@ def generate_masked_value(value: str, pii_type: Union[PIIType, str]) -> str:
     return f"[{type_val}_MASKED]"
 
 
+# Default enterprise classification rules stored natively in the backend
+DEFAULT_BACKEND_CLASSIFICATION_RULES: Dict[str, Union[PolicyAction, str]] = {
+    # 1. TOKENIZE: Identity & context preserved reversibly via encrypted ephemeral vault
+    "NAME": PolicyAction.TOKENIZE,
+    "PERSON_NAME": PolicyAction.TOKENIZE,
+    "FULL_NAME": PolicyAction.TOKENIZE,
+    "FIRST_NAME": PolicyAction.TOKENIZE,
+    "MIDDLE_NAME": PolicyAction.TOKENIZE,
+    "LAST_NAME": PolicyAction.TOKENIZE,
+    "SURNAME": PolicyAction.TOKENIZE,
+    "DATE_OF_BIRTH": PolicyAction.TOKENIZE,
+    "DOB": PolicyAction.TOKENIZE,
+    "EMAIL": PolicyAction.TOKENIZE,
+    "PERSONAL_EMAIL": PolicyAction.TOKENIZE,
+    "BUSINESS_EMAIL": PolicyAction.TOKENIZE,
+    "PHONE": PolicyAction.TOKENIZE,
+    "PHONE_NUMBER": PolicyAction.TOKENIZE,
+    "MOBILE_NUMBER": PolicyAction.TOKENIZE,
+    "TELEPHONE_NUMBER": PolicyAction.TOKENIZE,
+    "HOME_ADDRESS": PolicyAction.TOKENIZE,
+    "PERMANENT_ADDRESS": PolicyAction.TOKENIZE,
+    "TEMPORARY_ADDRESS": PolicyAction.TOKENIZE,
+    "EMPLOYEE_ID": PolicyAction.TOKENIZE,
+    "STUDENT_ID": PolicyAction.TOKENIZE,
+    "REGISTRATION_NUMBER": PolicyAction.TOKENIZE,
+    "UUCMS_NUMBER": PolicyAction.TOKENIZE,
+    "CUSTOMER_ID": PolicyAction.TOKENIZE,
+    "PERSONAL_ACCOUNT_ID": PolicyAction.TOKENIZE,
+    "DEVICE_ID": PolicyAction.TOKENIZE,
+    "ADVERTISING_ID": PolicyAction.TOKENIZE,
+    "USERNAME": PolicyAction.TOKENIZE,
+    "PERSONAL_USERNAME": PolicyAction.TOKENIZE,
+    "FAMILY_MEMBER_DETAILS": PolicyAction.TOKENIZE,
+    "EMERGENCY_CONTACT": PolicyAction.TOKENIZE,
+    "EMERGENCY_CONTACT_DETAILS": PolicyAction.TOKENIZE,
+
+    # 2. REDACT: Irreversibly scrubbed with zero vault retention (High-risk IDs, Location, Biometrics)
+    "PRECISE_GPS_COORDINATES": PolicyAction.REDACT,
+    "GPS_COORDINATES": PolicyAction.REDACT,
+    "LIVE_LOCATION": PolicyAction.REDACT,
+    "AADHAAR": PolicyAction.REDACT,
+    "AADHAAR_NUMBER": PolicyAction.REDACT,
+    "PASSPORT": PolicyAction.REDACT,
+    "PASSPORT_NUMBER": PolicyAction.REDACT,
+    "DRIVERS_LICENSE": PolicyAction.REDACT,
+    "DRIVING_LICENCE_NUMBER": PolicyAction.REDACT,
+    "VOTER_ID": PolicyAction.REDACT,
+    "VOTER_ID_NUMBER": PolicyAction.REDACT,
+    "PAN_CARD": PolicyAction.REDACT,
+    "PAN_NUMBER": PolicyAction.REDACT,
+    "SSN": PolicyAction.REDACT,
+    "SOCIAL_SECURITY_NUMBER": PolicyAction.REDACT,
+    "NATIONAL_ID": PolicyAction.REDACT,
+    "NATIONAL_ID_NUMBER": PolicyAction.REDACT,
+    "TAX_ID": PolicyAction.REDACT,
+    "TAX_IDENTIFICATION_NUMBER": PolicyAction.REDACT,
+    "SIGNATURE_IMAGE": PolicyAction.REDACT,
+    "DIGITAL_SIGNATURE": PolicyAction.REDACT,
+    "PERSONAL_PHOTOGRAPH": PolicyAction.REDACT,
+
+    # 3. MASK: Format-preserving partial obfuscation
+    "IP_ADDRESS": PolicyAction.MASK,
+    "IP": PolicyAction.MASK,
+
+    # 4. BLOCK_TOOL: Mandatory credentials blocked by default across boundaries
+    "PASSWORD": PolicyAction.BLOCK_TOOL,
+    "PIN": PolicyAction.BLOCK_TOOL,
+    "CVV": PolicyAction.BLOCK_TOOL,
+    "OTP": PolicyAction.BLOCK_TOOL,
+    "API_KEY": PolicyAction.BLOCK_TOOL,
+}
+
+
 class PolicyEngine:
     """
     Evaluates rules and determines appropriate privacy action for each detected entity
@@ -192,27 +266,69 @@ class PolicyEngine:
             "NAME": PIIType.PERSON_NAME,
             "PERSON_NAME": PIIType.PERSON_NAME,
             "FULL_NAME": PIIType.PERSON_NAME,
+            "FIRST_NAME": PIIType.PERSON_NAME,
+            "MIDDLE_NAME": PIIType.PERSON_NAME,
+            "LAST_NAME": PIIType.PERSON_NAME,
+            "SURNAME": PIIType.PERSON_NAME,
             "CUSTOMER_NAME": PIIType.PERSON_NAME,
             "PHONE": PIIType.PHONE,
             "PHONE_NUMBER": PIIType.PHONE,
             "MOBILE": PIIType.PHONE,
+            "MOBILE_NUMBER": PIIType.PHONE,
+            "TELEPHONE_NUMBER": PIIType.PHONE,
             "PASSPORT": PIIType.PASSPORT,
             "PASSPORT_NUMBER": PIIType.PASSPORT,
             "SSN": PIIType.SSN,
             "SOCIAL_SECURITY_NUMBER": PIIType.SSN,
             "EMAIL": PIIType.EMAIL,
+            "PERSONAL_EMAIL": PIIType.EMAIL,
+            "BUSINESS_EMAIL": PIIType.EMAIL,
             "CREDIT_CARD": PIIType.CREDIT_CARD,
             "CARD_NUMBER": PIIType.CREDIT_CARD,
             "AADHAAR": PIIType.AADHAAR,
+            "AADHAAR_NUMBER": PIIType.AADHAAR,
             "PAN": PIIType.PAN_CARD,
             "PAN_CARD": PIIType.PAN_CARD,
+            "PAN_NUMBER": PIIType.PAN_CARD,
             "DOB": PIIType.DATE_OF_BIRTH,
             "DATE_OF_BIRTH": PIIType.DATE_OF_BIRTH,
             "DL": PIIType.DRIVERS_LICENSE,
             "DRIVERS_LICENSE": PIIType.DRIVERS_LICENSE,
+            "DRIVING_LICENCE_NUMBER": PIIType.DRIVERS_LICENSE,
             "IP": PIIType.IP_ADDRESS,
             "IP_ADDRESS": PIIType.IP_ADDRESS,
             "API_KEY": PIIType.API_KEY,
+            "HOME_ADDRESS": PIIType.HOME_ADDRESS,
+            "PERMANENT_ADDRESS": PIIType.HOME_ADDRESS,
+            "TEMPORARY_ADDRESS": PIIType.HOME_ADDRESS,
+            "PRECISE_GPS_COORDINATES": PIIType.GPS_COORDINATES,
+            "GPS_COORDINATES": PIIType.GPS_COORDINATES,
+            "LIVE_LOCATION": PIIType.LIVE_LOCATION,
+            "VOTER_ID": PIIType.VOTER_ID,
+            "VOTER_ID_NUMBER": PIIType.VOTER_ID,
+            "NATIONAL_ID": PIIType.NATIONAL_ID,
+            "NATIONAL_ID_NUMBER": PIIType.NATIONAL_ID,
+            "TAX_ID": PIIType.TAX_ID,
+            "TAX_IDENTIFICATION_NUMBER": PIIType.TAX_ID,
+            "EMPLOYEE_ID": PIIType.EMPLOYEE_ID,
+            "STUDENT_ID": PIIType.STUDENT_ID,
+            "REGISTRATION_NUMBER": PIIType.STUDENT_ID,
+            "UUCMS_NUMBER": PIIType.STUDENT_ID,
+            "UUCMS": PIIType.STUDENT_ID,
+            "CUSTOMER_ID": PIIType.CUSTOMER_ID,
+            "PERSONAL_ACCOUNT_ID": PIIType.PERSONAL_ACCOUNT_ID,
+            "PERSONAL_ACCOUNT_IDENTIFIER": PIIType.PERSONAL_ACCOUNT_ID,
+            "DEVICE_ID": PIIType.DEVICE_ID,
+            "ADVERTISING_ID": PIIType.ADVERTISING_ID,
+            "USERNAME": PIIType.USERNAME,
+            "PERSONAL_USERNAME": PIIType.USERNAME,
+            "SIGNATURE_IMAGE": PIIType.DIGITAL_SIGNATURE,
+            "DIGITAL_SIGNATURE": PIIType.DIGITAL_SIGNATURE,
+            "PERSONAL_PHOTOGRAPH": PIIType.PERSONAL_PHOTOGRAPH,
+            "PHOTO": PIIType.PERSONAL_PHOTOGRAPH,
+            "FAMILY_MEMBER_DETAILS": PIIType.FAMILY_MEMBER_DETAILS,
+            "EMERGENCY_CONTACT": PIIType.EMERGENCY_CONTACT,
+            "EMERGENCY_CONTACT_DETAILS": PIIType.EMERGENCY_CONTACT,
         }
         clean = name.strip().upper()
         return alias_map.get(clean, clean)
@@ -281,6 +397,36 @@ class PolicyEngine:
             self.set_pii_rule(p_name, act, tool_name=tool_name)
 
     @classmethod
+    def load_backend_rules_file(cls) -> Dict[str, Any]:
+        """Loads default enterprise classification rules from classification_rules.json in backend."""
+        json_path = Path(__file__).parent / "classification_rules.json"
+        if json_path.exists():
+            try:
+                with open(json_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {"PII_RULES": DEFAULT_BACKEND_CLASSIFICATION_RULES}
+
+    @classmethod
+    def create_default_backend_policy(
+        cls,
+        tool_name: str = "*",
+        default_action: PolicyAction = PolicyAction.TOKENIZE,
+        simple_redaction: bool = True,
+    ) -> "PolicyEngine":
+        """
+        Creates a PolicyEngine pre-loaded with the native backend enterprise classification rules.
+        """
+        rules_data = cls.load_backend_rules_file()
+        return cls.from_rules_dict(
+            rules=rules_data,
+            tool_name=tool_name,
+            default_action=default_action,
+            simple_redaction=simple_redaction,
+        )
+
+    @classmethod
     def from_rules_dict(
         cls,
         rules: Dict[str, Any],
@@ -330,7 +476,7 @@ class PolicyEngine:
     ) -> PolicyAction:
         """Determines the action for a given tool, field, category, and PII type."""
         # 0. Resolve category
-        actual_category = category or TYPE_TO_CATEGORY.get(pii_type, SensitivityCategory.PERSONAL_INFO)
+        actual_category = TYPE_TO_CATEGORY.get(pii_type) or category or SensitivityCategory.PERSONAL_INFO
 
         # 1. Check exact tool policy rule
         rule = self._tool_policies.get(tool_name) or self._tool_policies.get("*")

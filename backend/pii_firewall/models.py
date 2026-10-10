@@ -39,6 +39,24 @@ class PIIType(str, Enum):
     SALARY_INFO = "SALARY_INFO"
     BANK_ACCOUNT = "BANK_ACCOUNT"
 
+    # Extended Identity & Privacy Types (Commvault Enterprise Classification)
+    GPS_COORDINATES = "GPS_COORDINATES"
+    LIVE_LOCATION = "LIVE_LOCATION"
+    VOTER_ID = "VOTER_ID"
+    NATIONAL_ID = "NATIONAL_ID"
+    TAX_ID = "TAX_ID"
+    EMPLOYEE_ID = "EMPLOYEE_ID"
+    STUDENT_ID = "STUDENT_ID"
+    CUSTOMER_ID = "CUSTOMER_ID"
+    PERSONAL_ACCOUNT_ID = "PERSONAL_ACCOUNT_ID"
+    DEVICE_ID = "DEVICE_ID"
+    ADVERTISING_ID = "ADVERTISING_ID"
+    USERNAME = "USERNAME"
+    DIGITAL_SIGNATURE = "DIGITAL_SIGNATURE"
+    PERSONAL_PHOTOGRAPH = "PERSONAL_PHOTOGRAPH"
+    FAMILY_MEMBER_DETAILS = "FAMILY_MEMBER_DETAILS"
+    EMERGENCY_CONTACT = "EMERGENCY_CONTACT"
+
     # Credentials & Authentication Secrets (Block by Default)
     PASSWORD = "PASSWORD"
     PIN = "PIN"                          # Debit/ATM/UPI Card PIN
@@ -87,6 +105,22 @@ TYPE_TO_CATEGORY: Dict[Union[PIIType, str], SensitivityCategory] = {
     PIIType.BIOMETRIC_TEMPLATE: SensitivityCategory.PERSONAL_INFO,
     PIIType.SALARY_INFO: SensitivityCategory.PERSONAL_INFO,
     PIIType.BANK_ACCOUNT: SensitivityCategory.PERSONAL_INFO,
+    PIIType.GPS_COORDINATES: SensitivityCategory.PERSONAL_INFO,
+    PIIType.LIVE_LOCATION: SensitivityCategory.PERSONAL_INFO,
+    PIIType.VOTER_ID: SensitivityCategory.PERSONAL_INFO,
+    PIIType.NATIONAL_ID: SensitivityCategory.PERSONAL_INFO,
+    PIIType.TAX_ID: SensitivityCategory.PERSONAL_INFO,
+    PIIType.EMPLOYEE_ID: SensitivityCategory.PERSONAL_INFO,
+    PIIType.STUDENT_ID: SensitivityCategory.PERSONAL_INFO,
+    PIIType.CUSTOMER_ID: SensitivityCategory.PERSONAL_INFO,
+    PIIType.PERSONAL_ACCOUNT_ID: SensitivityCategory.PERSONAL_INFO,
+    PIIType.DEVICE_ID: SensitivityCategory.PERSONAL_INFO,
+    PIIType.ADVERTISING_ID: SensitivityCategory.PERSONAL_INFO,
+    PIIType.USERNAME: SensitivityCategory.PERSONAL_INFO,
+    PIIType.DIGITAL_SIGNATURE: SensitivityCategory.PERSONAL_INFO,
+    PIIType.PERSONAL_PHOTOGRAPH: SensitivityCategory.PERSONAL_INFO,
+    PIIType.FAMILY_MEMBER_DETAILS: SensitivityCategory.PERSONAL_INFO,
+    PIIType.EMERGENCY_CONTACT: SensitivityCategory.PERSONAL_INFO,
 
     # 3. Confidential Business Information (Principle C: Destination-aware controls)
     PIIType.CONFIDENTIAL_SOURCE_CODE: SensitivityCategory.BUSINESS_CONFIDENTIAL,
@@ -141,6 +175,7 @@ class FirewallConfig:
     enable_luhn_validation: bool = True  # For credit cards
     enable_verhoeff_validation: bool = True  # For Aadhaar cards
     enable_semantic_nlp: bool = True  # Context-aware NLP & semantic detection
+    enable_cloud_ai: bool = False  # Pure local high-speed engine (<2ms SLA) by default; True for cloud AI
     gemini_api_key: Optional[str] = None  # Google Gemini Free Tier API Key
     gemini_model: str = "gemini-3.5-flash-lite"  # Gemini Model (e.g. gemini-3.5-flash-lite)
 
@@ -176,3 +211,4 @@ class FirewallResult:
     metrics: FirewallMetrics
     blocked: bool = False
     block_reason: Optional[str] = None
+    detected_entities: List[PIIEntity] = field(default_factory=list)

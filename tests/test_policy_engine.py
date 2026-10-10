@@ -181,6 +181,35 @@ class TestPolicyEngine(unittest.TestCase):
             "Task complete for David Miller. File referenced with [REDACTED] has been scrubbed."
         )
 
+    def test_backend_native_classification_rules(self):
+        """Verifies PolicyEngine loads classification rules natively from backend configuration."""
+        policy = PolicyEngine.create_default_backend_policy(simple_redaction=True)
+        self.assertIsNotNone(policy)
+        
+        # Verify Tokenized entities
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.PERSON_NAME), PolicyAction.TOKENIZE)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.EMAIL), PolicyAction.TOKENIZE)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.PHONE), PolicyAction.TOKENIZE)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.DATE_OF_BIRTH), PolicyAction.TOKENIZE)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.HOME_ADDRESS), PolicyAction.TOKENIZE)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.STUDENT_ID), PolicyAction.TOKENIZE)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.EMPLOYEE_ID), PolicyAction.TOKENIZE)
+        
+        # Verify Redacted entities (High-risk IDs, Location, Biometrics)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.PASSPORT), PolicyAction.REDACT)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.SSN), PolicyAction.REDACT)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.AADHAAR), PolicyAction.REDACT)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.PAN_CARD), PolicyAction.REDACT)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.DRIVERS_LICENSE), PolicyAction.REDACT)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.GPS_COORDINATES), PolicyAction.REDACT)
+        
+        # Verify Masked entities
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.IP_ADDRESS), PolicyAction.MASK)
+        
+        # Verify Blocked credentials
+        self.assertEqual(policy.get_action_for_entity("any_tool", "PASSWORD"), PolicyAction.BLOCK_TOOL)
+        self.assertEqual(policy.get_action_for_entity("any_tool", PIIType.API_KEY), PolicyAction.BLOCK_TOOL)
+
 
 if __name__ == "__main__":
     unittest.main()

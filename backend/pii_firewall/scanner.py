@@ -17,6 +17,35 @@ class JSONPIIScanner:
 
     def __init__(self, recognizers: List[BasePIIRecognizer]):
         self.recognizers = recognizers
+        self.last_detected_entities: List[PIIEntity] = []
+
+    def scan_text(self, text: str) -> List[PIIEntity]:
+        """Scans raw text across all recognizers and returns resolved, non-overlapping entities."""
+        clean_text = AdversarialDefenseNormalizer.strip_invisible_characters(text)
+        raw_entities: List[PIIEntity] = []
+        for recognizer in self.recognizers:
+            try:
+                found = recognizer.find_entities(clean_text)
+                raw_entities.extend(found)
+            except Exception:
+                continue
+
+        if not raw_entities:
+            return []
+
+        raw_entities.sort(key=lambda e: (e.end - e.start, e.confidence), reverse=True)
+        non_overlapping: List[PIIEntity] = []
+        for cand in raw_entities:
+            overlap = False
+            for chosen in non_overlapping:
+                if not (cand.end <= chosen.start or cand.start >= chosen.end):
+                    overlap = True
+                    break
+            if not overlap:
+                non_overlapping.append(cand)
+
+        non_overlapping.sort(key=lambda e: e.start)
+        return non_overlapping
 
     def scan_and_tokenize(
         self,
@@ -32,10 +61,12 @@ class JSONPIIScanner:
         """
         counts_by_type: Dict[str, int] = {}
         policy = policy_engine or PolicyEngine()
+        self.last_detected_entities = []
 
         def _tokenize_text(raw_text: str, current_field: Optional[str] = None) -> str:
-            # Step 1: Adversarial defense normalization (strip invisible zero-width chars)
+            # Step 1: Adversarial defense normalization (strip invisible zero-width chars and sanitize forged delimiters)
             clean_text = AdversarialDefenseNormalizer.strip_invisible_characters(raw_text)
+            clean_text = AdversarialDefenseNormalizer.sanitize_delimiters(clean_text, prefix=vault.prefix, suffix=vault.suffix)
 
             # Step 2: Adversarial Base64 PII scan and replacement
             base64_leaks = AdversarialDefenseNormalizer.inspect_base64_pii(clean_text, self.recognizers)
@@ -82,6 +113,10 @@ class JSONPIIScanner:
                         break
                 if not overlap:
                     non_overlapping.append(cand)
+
+            for ent in non_overlapping:
+                if ent not in self.last_detected_entities:
+                    self.last_detected_entities.append(ent)
 
             # Step 5: Sort entities right-to-left for in-place text slicing
             non_overlapping.sort(key=lambda e: e.start, reverse=True)

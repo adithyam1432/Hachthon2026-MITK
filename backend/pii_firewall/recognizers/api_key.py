@@ -5,7 +5,7 @@ Detects sensitive credentials sent to tools (OpenAI, AWS, GitHub, Stripe, Bearer
 
 import re
 from typing import List
-from pii_firewall.models import PIIEntity, PIIType
+from pii_firewall.models import PIIEntity, PIIType, SensitivityCategory
 from pii_firewall.recognizers.base import BasePIIRecognizer
 
 
@@ -59,6 +59,7 @@ class APIKeyRecognizer(BasePIIRecognizer):
                         end=end,
                         value=val,
                         confidence=0.99,
+                        category=SensitivityCategory.CREDENTIAL,
                     )
                 )
 

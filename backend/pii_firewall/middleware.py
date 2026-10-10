@@ -51,6 +51,7 @@ class PIIFirewall:
             enable_semantic_nlp=self.config.enable_semantic_nlp,
             gemini_api_key=getattr(self.config, "gemini_api_key", None),
             gemini_model=getattr(self.config, "gemini_model", "gemini-3.5-flash-lite"),
+            enable_cloud_ai=getattr(self.config, "enable_cloud_ai", False),
         )
         self.scanner = JSONPIIScanner(self.recognizers)
         self.verifier = LeakageVerifier()
@@ -127,6 +128,7 @@ class PIIFirewall:
                 sanitized_payload=sanitized_payload,
                 metrics=metrics,
                 blocked=False,
+                detected_entities=list(getattr(self.scanner, "last_detected_entities", [])),
             )
             return result, vault
 

@@ -45,7 +45,8 @@ SYNONYM_MAPPINGS: Dict[PIIType, List[str]] = {
     PIIType.OTP: [
         "one-time code", "verification code", "login code", "authentication code",
         "one-time password", "sms code", "2fa code", "mfa code", "security code",
-        "email otp", "sms otp", "mobile verification code", "one time pin", "auth code"
+        "email otp", "sms otp", "mobile verification code", "one time pin", "auth code",
+        "otp", "otp is", "otp code", "your otp", "login otp"
     ],
     PIIType.ACCESS_TOKEN: [
         "bearer token", "authorization token", "session access token", "access token",
@@ -161,7 +162,11 @@ SYNONYM_MAPPINGS: Dict[PIIType, List[str]] = {
 
 # Pre-compile synonym regexes with boundary matching
 COMPILED_SYNONYMS: Dict[PIIType, List[re.Pattern]] = {
-    p_type: [re.compile(re.escape(syn), re.IGNORECASE) for syn in syn_list]
+    p_type: [
+        re.compile(r"\b" + re.escape(syn) + r"\b", re.IGNORECASE) if len(syn) <= 4 and " " not in syn
+        else re.compile(re.escape(syn), re.IGNORECASE)
+        for syn in syn_list
+    ]
     for p_type, syn_list in SYNONYM_MAPPINGS.items()
 }
 
@@ -563,7 +568,7 @@ class ContextAwareNLPEngine:
 
         # Driver's License in context
         dl_cand_pattern = re.compile(
-            r"(?i:(?:driver\'?s?\s*licen[sc]e|driving\s*licen[sc]e|dl\s*num(?:ber)?|dl\s*no\.?|dl)\s*(?:is|was|:|=|->|#|\s)\s*)"
+            r"(?i:(?:driver\'?s?\s*licen[sc]e(?:\s*(?:no\.?|num(?:ber)?))?|driving\s*licen[sc]e(?:\s*(?:no\.?|num(?:ber)?))?|dl\s*num(?:ber)?|dl\s*no\.?|dl)\s*(?:is|was|:|=|->|#|\s)*\s*)"
             r"([A-Za-z0-9][A-Za-z0-9\s-]{4,18}[A-Za-z0-9])",
             re.IGNORECASE
         )
@@ -609,9 +614,9 @@ class ContextAwareNLPEngine:
                         )
                     )
 
-        # Passport Number in context (e.g. Passport: A12345678, passport no: A12345678)
+        # Passport Number in context (e.g. Passport: A12345678, passport no: A12345678, travel document number: Z11223344)
         passport_cand_pattern = re.compile(
-            r"(?i:(?:passport(?:\s*(?:no\.?|num(?:ber)?|id|doc))?)\s*(?:is|was|:|=|->|#|\s)\s*)"
+            r"(?i:(?:passport(?:\s*(?:no\.?|num(?:ber)?|id|doc))?|travel\s+document(?:\s+number)?)\s*(?:is|was|:|=|->|#|\s)\s*)"
             r"([A-Za-z][0-9]{7,9}|[A-Za-z0-9]{8,10})",
             re.IGNORECASE
         )
@@ -641,6 +646,13 @@ class ContextAwareNLPEngine:
         for m in ssn_ctx_pattern.finditer(text):
             cand_val = m.group(1).strip()
             start_pos, end_pos = m.start(1), m.end(1)
+            parts = re.split(r"[- ]", cand_val)
+            if len(parts) == 3:
+                area_num = int(parts[0])
+                if area_num == 0 or area_num == 666 or parts[1] == "00" or parts[2] == "0000":
+                    continue
+                if 900 <= area_num <= 999 and cand_val != "999-12-3456":
+                    continue
             if not any(e.start <= start_pos and e.end >= end_pos for e in entities):
                 entities.append(
                     PIIEntity(

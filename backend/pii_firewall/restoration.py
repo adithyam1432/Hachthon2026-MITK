@@ -50,20 +50,60 @@ class ResponseRestorer:
 
             return self.token_regex.sub(_replace_token, text)
 
-        def _walk(item: Any, current_key: Optional[str] = None) -> Any:
-            # Check field restriction if specified
-            if allowed_fields is not None and current_key is not None:
-                if current_key not in allowed_fields:
-                    return item
+        allowed_set = set(allowed_fields) if allowed_fields is not None else None
+
+        def _walk(
+            item: Any,
+            current_key: Optional[str] = None,
+            parent_allowed: bool = False,
+            key_path: str = "",
+        ) -> Any:
+            # Determine if this node is permitted by allowed_fields
+            is_node_allowed = (
+                allowed_set is None
+                or parent_allowed
+                or (current_key in allowed_set if current_key else False)
+                or (key_path in allowed_set if key_path else False)
+            )
+
+            # If not allowed and this is a leaf (non-container), do not restore tokens
+            if allowed_set is not None and not is_node_allowed and not isinstance(item, (dict, list, tuple)):
+                return item
 
             if isinstance(item, str):
-                return _restore_string(item)
+                if is_node_allowed:
+                    return _restore_string(item)
+                return item
             elif isinstance(item, dict):
-                return {k: _walk(v, current_key=k) for k, v in item.items()}
+                return {
+                    k: _walk(
+                        v,
+                        current_key=k,
+                        parent_allowed=is_node_allowed,
+                        key_path=f"{key_path}.{k}" if key_path else k,
+                    )
+                    for k, v in item.items()
+                }
             elif isinstance(item, list):
-                return [_walk(v, current_key=current_key) for v in item]
+                return [
+                    _walk(
+                        v,
+                        current_key=current_key,
+                        parent_allowed=is_node_allowed,
+                        key_path=key_path,
+                    )
+                    for v in item
+                ]
             elif isinstance(item, tuple):
-                return tuple(_walk(v, current_key=current_key) for v in item)
+                return tuple(
+                    _walk(
+                        v,
+                        current_key=current_key,
+                        parent_allowed=is_node_allowed,
+                        key_path=key_path,
+                    )
+                    for v in item
+                )
             else:
                 return item
 

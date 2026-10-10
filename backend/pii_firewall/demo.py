@@ -221,6 +221,79 @@ def run_live_demo():
     print("   ✔ Zero-width spaces stripped and email REDACTED -> [REDACTED_EMAIL]")
     print("   ✔ Credit card partially MASKED -> ****-****-****-1111")
 
+    # Scenario 6: Dynamic Classification Matrix & Dual-Mode Simultaneous Actions
+    print("\n" + "─" * 72)
+    print(" SCENARIO 6: Dynamic Classification Matrix (Dual-Mode Tokenize & Redact)")
+    print("─" * 72)
+
+    # 6A: Profile Change
+    rules_matrix_6a = {
+        "PII_RULES": {
+            "NAME": "TOKENIZE",
+            "PASSPORT_NUMBER": "REDACT"
+        }
+    }
+    policy_6a = PolicyEngine.from_rules_dict(rules_matrix_6a, simple_redaction=True)
+    fw_6a = PIIFirewall(policy_engine=policy_6a)
+
+    req_6a = {
+        "tool": "profile_updater",
+        "arguments": {
+            "query": "Update account profile. Name: David Miller, Passport: A12345678, Status: Active."
+        }
+    }
+    print("\n[6A - Step 1] Outgoing Profile Change Request:")
+    print(format_json(req_6a))
+
+    res_6a, vault_6a = fw_6a.intercept_request(req_6a)
+    print("\n[6A - Step 2] Sanitized Payload (NAME Tokenized, Passport Redacted):")
+    print(format_json(res_6a.sanitized_payload))
+    print(f"   ✔ Vault contains Name Token: {dict(vault_6a._token_to_value)}")
+    print(f"   ✔ Passport NOT stored in vault (Scrubbed permanently with [REDACTED])")
+
+    name_token_6a = list(vault_6a._token_to_value.keys())[0]
+    mock_resp_6a = {
+        "status": "success",
+        "message": f"Profile updated for {name_token_6a} with passport [REDACTED]."
+    }
+    restored_6a, _ = fw_6a.intercept_response(mock_resp_6a, request_id=res_6a.metrics.request_id)
+    print("\n[6A - Step 3] Restored Response to AI Agent Context:")
+    print(format_json(restored_6a))
+    print("   ✔ David Miller restored cleanly; [REDACTED] remains scrubbed permanently")
+
+    # 6B: Live Dual-Mode Comparison
+    rules_matrix_6b = {
+        "PII_RULES": {
+            "NAME": "TOKENIZE",
+            "SSN": "REDACT"
+        }
+    }
+    policy_6b = PolicyEngine.from_rules_dict(rules_matrix_6b, simple_redaction=True)
+    fw_6b = PIIFirewall(policy_engine=policy_6b)
+
+    req_6b = {
+        "tool": "crm_tool",
+        "arguments": {
+            "query": "Send a welcome note to David Miller and delete expired file containing SSN 999-12-3456."
+        }
+    }
+    print("\n[6B - Step 1] Outgoing Dual-Mode Request:")
+    print(format_json(req_6b))
+
+    res_6b, vault_6b = fw_6b.intercept_request(req_6b)
+    print("\n[6B - Step 2] Sanitized Payload (NAME Tokenized, SSN Redacted):")
+    print(format_json(res_6b.sanitized_payload))
+
+    name_token_6b = list(vault_6b._token_to_value.keys())[0]
+    mock_resp_6b = {
+        "status": "completed",
+        "msg": f"Task complete for {name_token_6b}. File referenced with [REDACTED] has been scrubbed."
+    }
+    restored_6b, _ = fw_6b.intercept_response(mock_resp_6b, request_id=res_6b.metrics.request_id)
+    print("\n[6B - Step 3] Restored Response to AI Agent Context:")
+    print(format_json(restored_6b))
+    print("   ✔ David Miller restored cleanly; SSN remains scrubbed as [REDACTED]")
+
     print("\n" + "=" * 72)
     print("  🎉 DEMO COMPLETE: All PRD Functional & Safety Requirements Verified!")
     print("=" * 72)

@@ -4,6 +4,7 @@ Minimalist, zero-leakage privacy gateway simulation with Context-Aware NLP,
 Semantic Classification, and Mandatory Three-Tier Security Principles.
 """
 
+import base64
 import copy
 import json
 import os
@@ -40,6 +41,40 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# Sticky Cyber Background from assets
+_bg_base64 = ""
+for _candidate in [
+    Path(__file__).resolve().parent / "assets" / "cyber_background.jpg",
+    Path(__file__).resolve().parent.parent / "assets" / "cyber_background.jpg",
+    Path("assets/cyber_background.jpg").resolve(),
+]:
+    if _candidate.exists():
+        with open(_candidate, "rb") as _f:
+            _bg_base64 = base64.b64encode(_f.read()).decode("utf-8")
+        break
+
+if _bg_base64:
+    st.markdown(
+        f"""
+        <style>
+            [data-testid="stAppViewContainer"], .stApp {{
+                background-image: url("data:image/jpeg;base64,{_bg_base64}") !important;
+                background-size: cover !important;
+                background-position: center !important;
+                background-repeat: no-repeat !important;
+                background-attachment: fixed !important;
+            }}
+            [data-testid="stHeader"] {{
+                background: transparent !important;
+            }}
+            [data-testid="stMain"] {{
+                background: transparent !important;
+            }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # Minimalist Custom CSS
 st.markdown("""
